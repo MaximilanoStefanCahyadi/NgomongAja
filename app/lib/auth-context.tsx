@@ -7,6 +7,7 @@ import {
   type ReactNode,
 } from 'react';
 
+import { registerPushToken } from './notifications';
 import { supabase } from './supabase';
 
 export type Profile = {
@@ -71,6 +72,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         if (error) console.warn('Failed to load profile:', error.message);
         setProfile((data as Profile) ?? null);
         setLoading(false);
+        // PA-3: save this device's push token (no-op inside Expo Go).
+        if (data) registerPushToken(data.id);
       });
 
     return () => {
@@ -79,6 +82,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [session]);
 
   const signOut = async () => {
+    // Clear this device's push token first (shared phones are common for UMKM):
+    // otherwise the next person to log in keeps receiving the previous user's
+    // order/chat pushes. Best-effort — never block sign-out on it.
+    if (profile) {
+      await supabase
+        .from('profiles')
+        .update({ push_token: null })
+        .eq('id', profile.id)
+        .then(undefined, (e) => console.warn('clear push_token:', e?.message));
+    }
     await supabase.auth.signOut();
   };
 

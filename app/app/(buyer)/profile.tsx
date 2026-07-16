@@ -12,9 +12,12 @@ import {
   TextInput,
   View,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { listAddresses, type Address } from '@/lib/addresses';
 import { useAuth } from '@/lib/auth-context';
+import { friendlyError } from '@/lib/errors';
+import { colors, radius, scrollWrap, spacing } from '@/lib/theme';
 import { getMyVerification, submitVerification, type Verification } from '@/lib/verification';
 
 // "2026-07-15T…" -> "15 Jul 2026"
@@ -27,9 +30,11 @@ function formatDate(iso: string): string {
 }
 
 export default function BuyerProfile() {
+  const insets = useSafeAreaInsets();
   const { profile, signOut } = useAuth();
   const [verification, setVerification] = useState<Verification | null>(null);
   const [loaded, setLoaded] = useState(false);
+  const [loadFailed, setLoadFailed] = useState(false);
   const [addresses, setAddresses] = useState<Address[]>([]);
 
   // KTP form state
@@ -38,23 +43,48 @@ export default function BuyerProfile() {
   const [submitting, setSubmitting] = useState(false);
   const [resubmitting, setResubmitting] = useState(false);
 
+  const load = useCallback(() => {
+    if (!profile) return;
+    setLoadFailed(false);
+    getMyVerification(profile.id)
+      .then(setVerification)
+      .catch((e) => {
+        console.warn('getMyVerification:', e.message);
+        setLoadFailed(true);
+      })
+      .finally(() => setLoaded(true));
+    listAddresses(profile.id)
+      .then(setAddresses)
+      .catch((e) => console.warn('listAddresses:', e.message));
+  }, [profile]);
+
   useFocusEffect(
     useCallback(() => {
-      if (!profile) return;
-      getMyVerification(profile.id)
-        .then(setVerification)
-        .catch((e) => console.warn('getMyVerification:', e.message))
-        .finally(() => setLoaded(true));
-      listAddresses(profile.id)
-        .then(setAddresses)
-        .catch((e) => console.warn('listAddresses:', e.message));
-    }, [profile])
+      load();
+    }, [load])
   );
 
   if (!profile || !loaded) {
     return (
       <View style={styles.center}>
-        <ActivityIndicator size="large" />
+        <ActivityIndicator size="large" color={colors.primary} />
+      </View>
+    );
+  }
+
+  if (loadFailed) {
+    return (
+      <View style={styles.center}>
+        <Text style={styles.errorText}>Gagal memuat. Periksa internetmu.</Text>
+        <Pressable
+          style={styles.button}
+          onPress={() => {
+            setLoaded(false);
+            load();
+          }}
+          accessibilityRole="button">
+          <Text style={styles.buttonText}>Coba Lagi</Text>
+        </Pressable>
       </View>
     );
   }
@@ -82,8 +112,8 @@ export default function BuyerProfile() {
       setNik('');
       setImageUri(null);
       setResubmitting(false);
-    } catch (e: any) {
-      Alert.alert('Gagal mengajukan verifikasi', e.message);
+    } catch (e) {
+      Alert.alert('Gagal mengajukan verifikasi', friendlyError(e));
     } finally {
       setSubmitting(false);
     }
@@ -93,8 +123,11 @@ export default function BuyerProfile() {
     !verification || (verification.status === 'rejected' && resubmitting);
 
   return (
-    <ScrollView contentContainerStyle={styles.container} keyboardShouldPersistTaps="handled">
-      <Pressable onPress={() => router.back()}>
+    <ScrollView
+      style={{ backgroundColor: colors.bg }}
+      contentContainerStyle={[styles.container, { paddingTop: insets.top + 12 }]}
+      keyboardShouldPersistTaps="handled">
+      <Pressable onPress={() => router.back()} hitSlop={12} style={styles.backWrap}>
         <Text style={styles.back}>‹ Beranda</Text>
       </Pressable>
       <Text style={styles.title}>Profil Saya</Text>
@@ -108,8 +141,14 @@ export default function BuyerProfile() {
       <Text style={styles.sectionTitle}>Verifikasi Akun</Text>
 
       {verification?.status === 'approved' && (
-        <View style={styles.approvedBox}>
-          <Text style={styles.approvedText}>✅ Terverifikasi</Text>
+        // Achievement chip — a small "trophy" moment for finishing verification.
+        <View style={styles.achievementChip}>
+          <Text style={styles.achievementEmoji}>🏅</Text>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.achievementTitle}>Terverifikasi</Text>
+            <Text style={styles.achievementDesc}>Akunmu sudah tepercaya. Keren!</Text>
+          </View>
+          <Text style={styles.achievementSpark}>✨</Text>
         </View>
       )}
 
@@ -150,7 +189,7 @@ export default function BuyerProfile() {
             onChangeText={(t) => setNik(t.replace(/\D/g, ''))}
           />
           {nik.length > 0 && !nikValid && (
-            <Text style={styles.warn}>NIK harus tepat 16 digit angka.</Text>
+            <Text style={styles.warn}>⚠️ NIK harus tepat 16 digit angka.</Text>
           )}
 
           <Text style={styles.label}>Foto KTP</Text>
@@ -186,7 +225,7 @@ export default function BuyerProfile() {
         ))
       )}
 
-      <Pressable onPress={signOut}>
+      <Pressable onPress={signOut} hitSlop={12} style={styles.signOutWrap}>
         <Text style={styles.signOut}>Keluar</Text>
       </Pressable>
     </ScrollView>
@@ -194,111 +233,133 @@ export default function BuyerProfile() {
 }
 
 const styles = StyleSheet.create({
-  center: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-  container: { flexGrow: 1, padding: 24, paddingTop: 64, gap: 10 },
-  back: { color: '#16a34a', fontSize: 16, marginBottom: 4 },
-  title: { fontSize: 28, fontWeight: 'bold' },
+  center: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: 16,
+    padding: spacing.xl,
+    backgroundColor: colors.bg,
+  },
+  errorText: { color: colors.body, fontSize: 15, textAlign: 'center' },
+  container: { ...scrollWrap, gap: 10 },
+  backWrap: { alignSelf: 'flex-start', paddingVertical: 12 },
+  back: { color: colors.primary, fontSize: 16, fontWeight: '600' },
+  title: { fontSize: 28, fontWeight: 'bold', color: colors.text },
   card: {
-    backgroundColor: '#fff',
-    borderRadius: 10,
+    backgroundColor: colors.card,
+    borderRadius: radius.lg,
     padding: 16,
     borderWidth: 1,
-    borderColor: '#eee',
-    gap: 8,
+    borderColor: colors.border,
+    gap: spacing.sm,
   },
-  name: { fontSize: 18, fontWeight: '600' },
-  meta: { fontSize: 14, color: '#666' },
+  name: { fontSize: 18, fontWeight: '600', color: colors.text },
+  meta: { fontSize: 14, color: colors.body },
   roleBadge: {
     alignSelf: 'flex-start',
     fontSize: 12,
     fontWeight: '600',
-    color: '#15803d',
-    backgroundColor: '#dcfce7',
+    color: colors.primaryDark,
+    backgroundColor: colors.primaryChipBg,
     paddingHorizontal: 10,
     paddingVertical: 4,
-    borderRadius: 999,
+    borderRadius: radius.pill,
     overflow: 'hidden',
   },
-  sectionTitle: { fontSize: 16, fontWeight: '600', marginTop: 10 },
-  approvedBox: {
-    backgroundColor: '#dcfce7',
-    borderRadius: 10,
+  sectionTitle: { fontSize: 16, fontWeight: '600', marginTop: 10, color: colors.text },
+  achievementChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    backgroundColor: colors.primaryChipBg,
+    borderRadius: radius.lg,
     padding: 14,
-    borderWidth: 1,
-    borderColor: '#86efac',
+    borderWidth: 2,
+    borderColor: colors.amberSoftBorder,
+    shadowColor: colors.amber,
+    shadowOpacity: 0.35,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 3,
   },
-  approvedText: { color: '#15803d', fontWeight: '700', fontSize: 15 },
+  achievementEmoji: { fontSize: 28 },
+  achievementTitle: { color: colors.primaryDark, fontWeight: '800', fontSize: 16 },
+  achievementDesc: { color: colors.primaryDark, fontSize: 13, marginTop: 1 },
+  achievementSpark: { fontSize: 18 },
   pendingBox: {
-    backgroundColor: '#fef3c7',
-    borderRadius: 10,
+    backgroundColor: colors.amberBg,
+    borderRadius: radius.md,
     padding: 14,
     borderWidth: 1,
     borderColor: '#fde68a',
   },
-  pendingText: { color: '#92400e', fontSize: 14, lineHeight: 20 },
+  pendingText: { color: colors.amberText, fontSize: 14, lineHeight: 20 },
   rejectedBox: {
-    backgroundColor: '#fee2e2',
-    borderRadius: 10,
+    backgroundColor: colors.dangerBg,
+    borderRadius: radius.md,
     padding: 14,
     borderWidth: 1,
-    borderColor: '#fecaca',
-    gap: 8,
+    borderColor: colors.dangerBorder,
+    gap: spacing.sm,
   },
-  rejectedTitle: { color: '#b91c1c', fontWeight: '700', fontSize: 15 },
-  rejectedReason: { color: '#b91c1c', fontSize: 14, lineHeight: 20 },
+  rejectedTitle: { color: colors.dangerDark, fontWeight: '700', fontSize: 15 },
+  rejectedReason: { color: colors.dangerDark, fontSize: 14, lineHeight: 20 },
   privacy: {
     fontSize: 13,
-    color: '#92400e',
-    backgroundColor: '#fef3c7',
-    borderRadius: 8,
+    color: colors.amberText,
+    backgroundColor: colors.amberBg,
+    borderRadius: radius.sm,
     padding: 12,
     lineHeight: 19,
     overflow: 'hidden',
   },
-  label: { fontSize: 13, fontWeight: '600', color: '#444', marginTop: 4 },
+  label: { fontSize: 13, fontWeight: '700', color: colors.body, marginTop: spacing.xs },
   input: {
     borderWidth: 1,
-    borderColor: '#ccc',
-    borderRadius: 8,
+    borderColor: colors.inputBorder,
+    borderRadius: radius.md,
     padding: 10,
     fontSize: 15,
-    backgroundColor: '#fff',
+    backgroundColor: colors.card,
+    color: colors.text,
   },
-  warn: { color: '#b45309', fontSize: 12 },
+  warn: { color: '#b45309', fontSize: 15 },
   preview: {
     width: '100%',
     height: 180,
-    borderRadius: 8,
-    backgroundColor: '#f3f4f6',
+    borderRadius: radius.sm,
+    backgroundColor: colors.neutralBg,
   },
   outlineButton: {
     borderWidth: 2,
-    borderColor: '#16a34a',
-    borderRadius: 8,
+    borderColor: colors.primary,
+    borderRadius: radius.md,
     padding: 12,
     alignItems: 'center',
-    backgroundColor: '#f0fdf4',
+    backgroundColor: colors.primarySoft,
   },
-  outlineButtonText: { color: '#15803d', fontSize: 14, fontWeight: '600' },
+  outlineButtonText: { color: colors.primaryDark, fontSize: 14, fontWeight: '600' },
   button: {
-    backgroundColor: '#16a34a',
-    borderRadius: 8,
+    backgroundColor: colors.primary,
+    borderRadius: radius.md,
     padding: 14,
     alignItems: 'center',
-    marginTop: 4,
+    marginTop: spacing.xs,
   },
-  buttonDisabled: { backgroundColor: '#a7cbb4' },
-  buttonText: { color: '#fff', fontSize: 16, fontWeight: '600' },
-  empty: { color: '#666', fontSize: 14 },
+  buttonDisabled: { backgroundColor: colors.disabled },
+  buttonText: { color: colors.white, fontSize: 16, fontWeight: '600' },
+  empty: { color: colors.body, fontSize: 14 },
   addressCard: {
-    backgroundColor: '#fff',
-    borderRadius: 10,
+    backgroundColor: colors.card,
+    borderRadius: radius.lg,
     padding: 14,
     borderWidth: 1,
-    borderColor: '#eee',
+    borderColor: colors.border,
     gap: 2,
   },
-  addressLabel: { fontSize: 13, fontWeight: '700', color: '#15803d' },
-  addressText: { fontSize: 14, color: '#444', lineHeight: 20 },
-  signOut: { textAlign: 'center', color: '#dc2626', marginTop: 16, fontSize: 14 },
+  addressLabel: { fontSize: 13, fontWeight: '700', color: colors.primaryDark },
+  addressText: { fontSize: 14, color: colors.body, lineHeight: 20 },
+  signOutWrap: { alignSelf: 'center', paddingVertical: 12, marginTop: spacing.sm },
+  signOut: { textAlign: 'center', color: colors.danger, fontSize: 14, fontWeight: '600' },
 });

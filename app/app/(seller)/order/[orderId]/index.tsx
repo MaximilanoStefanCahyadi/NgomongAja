@@ -10,9 +10,11 @@ import {
   TextInput,
   View,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { useAuth } from '@/lib/auth-context';
 import { postSystemMessage, sendPaymentRequest } from '@/lib/chat';
+import { friendlyError } from '@/lib/errors';
 import { formatRupiah } from '@/lib/format';
 import {
   getOrder,
@@ -23,31 +25,29 @@ import {
   type OrderRow,
   type OrderStatus,
 } from '@/lib/orders';
+import { PAYMENT_METHOD_LABEL } from '@/lib/status-ui';
+import { colors, radius, scrollWrap } from '@/lib/theme';
 
+// Full-width status banner (more descriptive than the list chips).
 const STATUS_BANNER: Record<OrderStatus, { label: string; bg: string; fg: string }> = {
-  pending: { label: 'Menunggu konfirmasi', bg: '#fef3c7', fg: '#92400e' },
-  accepted: { label: 'Sedang diproses', bg: '#dbeafe', fg: '#1e40af' },
-  ready: { label: 'Siap diambil / diantar', bg: '#ccfbf1', fg: '#115e59' },
-  completed: { label: 'Pesanan selesai', bg: '#dcfce7', fg: '#15803d' },
-  rejected: { label: 'Pesanan ditolak', bg: '#fee2e2', fg: '#b91c1c' },
-  cancelled: { label: 'Pesanan dibatalkan', bg: '#fee2e2', fg: '#b91c1c' },
-};
-
-const PAYMENT_METHOD_LABEL: Record<string, string> = {
-  cash: 'Tunai (COD)',
-  gopay: 'GoPay',
-  transfer: 'Transfer',
+  pending: { label: 'Menunggu konfirmasi', bg: colors.amberBg, fg: colors.amberText },
+  accepted: { label: 'Sedang diproses', bg: colors.infoBg, fg: colors.info },
+  ready: { label: 'Siap diambil / diantar', bg: colors.tealBg, fg: colors.teal },
+  completed: { label: 'Pesanan selesai', bg: colors.primaryChipBg, fg: colors.primaryDark },
+  rejected: { label: 'Pesanan ditolak', bg: colors.dangerBg, fg: colors.dangerDark },
+  cancelled: { label: 'Pesanan dibatalkan', bg: colors.dangerBg, fg: colors.dangerDark },
 };
 
 const PAYMENT_STATUS_LABEL: Record<string, { label: string; color: string }> = {
-  pending: { label: 'Belum dibayar', color: '#92400e' },
-  paid: { label: 'Lunas', color: '#15803d' },
-  voided: { label: 'Dibatalkan', color: '#6b7280' },
+  pending: { label: 'Belum dibayar', color: colors.amberText },
+  paid: { label: 'Lunas', color: colors.primaryDark },
+  voided: { label: 'Tidak perlu dibayar', color: colors.secondary },
 };
 
 const REJECT_PRESETS = ['Stok habis', 'Toko tutup'];
 
 export default function SellerOrderDetail() {
+  const insets = useSafeAreaInsets();
   const { orderId } = useLocalSearchParams<{ orderId: string }>();
   const { profile } = useAuth();
   const [order, setOrder] = useState<OrderRow | null>(null);
@@ -77,7 +77,7 @@ export default function SellerOrderDetail() {
       await updateOrderStatus(orderId, status);
       await load();
     } catch (e: any) {
-      Alert.alert('Gagal', e.message);
+      Alert.alert('Gagal', friendlyError(e));
     } finally {
       setBusy(false);
     }
@@ -104,7 +104,7 @@ export default function SellerOrderDetail() {
       setReason('');
       await load();
     } catch (e: any) {
-      Alert.alert('Gagal', e.message);
+      Alert.alert('Gagal', friendlyError(e));
     } finally {
       setBusy(false);
     }
@@ -118,7 +118,7 @@ export default function SellerOrderDetail() {
       await updateOrderStatus(orderId, 'completed');
       await load();
     } catch (e: any) {
-      Alert.alert('Gagal', e.message);
+      Alert.alert('Gagal', friendlyError(e));
     } finally {
       setBusy(false);
     }
@@ -145,7 +145,7 @@ export default function SellerOrderDetail() {
       await sendPaymentRequest(orderId, profile.id, formatRupiah(order.total));
       Alert.alert('NgomongAja', 'Permintaan terkirim ke chat');
     } catch (e: any) {
-      Alert.alert('Gagal', e.message);
+      Alert.alert('Gagal', friendlyError(e));
     } finally {
       setBusy(false);
     }
@@ -158,7 +158,7 @@ export default function SellerOrderDetail() {
       await markPaidByBuyer(orderId);
       await load();
     } catch (e: any) {
-      Alert.alert('Gagal', e.message);
+      Alert.alert('Gagal', friendlyError(e));
     } finally {
       setBusy(false);
     }
@@ -167,7 +167,7 @@ export default function SellerOrderDetail() {
   if (!order || !items) {
     return (
       <View style={styles.center}>
-        <ActivityIndicator size="large" />
+        <ActivityIndicator size="large" color={colors.primary} />
       </View>
     );
   }
@@ -180,9 +180,11 @@ export default function SellerOrderDetail() {
   const subtotal = order.total - order.delivery_fee;
 
   return (
-    <ScrollView contentContainerStyle={styles.container} keyboardShouldPersistTaps="handled">
-      <Pressable onPress={() => router.back()}>
-        <Text style={styles.back}>‹ Kembali</Text>
+    <ScrollView
+      contentContainerStyle={[styles.container, { paddingTop: insets.top + 12 }]}
+      keyboardShouldPersistTaps="handled">
+      <Pressable onPress={() => router.back()} hitSlop={12} style={styles.backWrap}>
+        <Text style={styles.back}>‹ Pesanan</Text>
       </Pressable>
       <Text style={styles.title}>Detail Pesanan</Text>
 
@@ -249,6 +251,7 @@ export default function SellerOrderDetail() {
             <Text style={[styles.payStatus, { color: payStatus.color }]}>{payStatus.label}</Text>
           )}
         </View>
+        <Text style={styles.demoNote}>DEMO — tidak ada uang berpindah</Text>
       </View>
 
       {/* Reason panel (reject / cancel) */}
@@ -385,22 +388,40 @@ export default function SellerOrderDetail() {
 }
 
 const styles = StyleSheet.create({
-  center: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-  container: { flexGrow: 1, padding: 24, paddingTop: 64, gap: 12 },
-  back: { color: '#16a34a', fontSize: 16 },
-  title: { fontSize: 24, fontWeight: 'bold' },
-  banner: { borderRadius: 8, padding: 12, alignItems: 'center' },
+  center: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: colors.bg,
+  },
+  container: { ...scrollWrap, gap: 12 },
+  backWrap: { alignSelf: 'flex-start', paddingVertical: 12 },
+  back: { color: colors.primary, fontSize: 16, fontWeight: '600' },
+  title: { fontSize: 24, fontWeight: 'bold', color: colors.text },
+  banner: { borderRadius: radius.md, padding: 12, alignItems: 'center' },
   bannerText: { fontSize: 15, fontWeight: '700' },
   card: {
-    backgroundColor: '#fff',
-    borderRadius: 8,
+    backgroundColor: colors.card,
+    borderRadius: radius.md,
     padding: 14,
     borderWidth: 1,
-    borderColor: '#eee',
+    borderColor: colors.border,
     gap: 4,
   },
-  cardLabel: { fontSize: 12, color: '#888', textTransform: 'uppercase', fontWeight: '600' },
-  cardValue: { fontSize: 15, color: '#222' },
+  cardLabel: { fontSize: 12, color: colors.secondary, textTransform: 'uppercase', fontWeight: '600' },
+  cardValue: { fontSize: 15, color: colors.text },
+  demoNote: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: colors.amberText,
+    backgroundColor: colors.amberBg,
+    alignSelf: 'flex-start',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 6,
+    overflow: 'hidden',
+    marginTop: 4,
+  },
   buyerName: { fontSize: 18, fontWeight: '700' },
   buyerPhone: { fontSize: 20, fontWeight: 'bold', color: '#15803d' },
   addressBox: {

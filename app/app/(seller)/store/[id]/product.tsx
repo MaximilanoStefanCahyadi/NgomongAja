@@ -3,6 +3,8 @@ import { useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
+  KeyboardAvoidingView,
+  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -11,10 +13,14 @@ import {
   TextInput,
   View,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { friendlyError } from '@/lib/errors';
 import { createProduct, listProducts, updateProduct } from '@/lib/products';
+import { colors, radius, scrollWrap } from '@/lib/theme';
 
 export default function ProductForm() {
+  const insets = useSafeAreaInsets();
   const { id: storeId, productId } = useLocalSearchParams<{
     id: string;
     productId?: string;
@@ -76,89 +82,132 @@ export default function ProductForm() {
       } else {
         router.back();
       }
-    } catch (e: any) {
-      Alert.alert('Gagal menyimpan', e.message);
+    } catch (e) {
+      Alert.alert('Gagal menyimpan', friendlyError(e));
     } finally {
       setSubmitting(false);
     }
   };
 
   return (
-    <ScrollView contentContainerStyle={styles.container} keyboardShouldPersistTaps="handled">
-      <Text style={styles.title}>{isEdit ? 'Ubah Barang' : 'Tambah Barang'}</Text>
-      {!isEdit && sessionCount > 0 && (
-        <Text style={styles.counter}>✓ {sessionCount} barang ditambahkan sesi ini</Text>
-      )}
+    <KeyboardAvoidingView
+      style={{ flex: 1, backgroundColor: colors.bg }}
+      behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+      <ScrollView
+        contentContainerStyle={[styles.container, { paddingTop: insets.top + 12 }]}
+        keyboardShouldPersistTaps="handled">
+        <Pressable onPress={() => router.back()} hitSlop={12} style={styles.backWrap}>
+          <Text style={styles.back}>‹ Toko</Text>
+        </Pressable>
+        <Text style={styles.title}>{isEdit ? 'Ubah Barang' : 'Tambah Barang'}</Text>
+        {!isEdit && sessionCount > 0 && (
+          <View style={styles.achievement}>
+            <Text style={styles.achievementText}>
+              🔥 {sessionCount} barang ditambahkan sesi ini!
+            </Text>
+          </View>
+        )}
 
-      <TextInput
-        ref={nameRef}
-        style={styles.input}
-        placeholder="Nama barang (contoh: Minyak Goreng Bimoli 1L)"
-        value={name}
-        onChangeText={setName}
-        autoFocus
-      />
-      <TextInput
-        style={styles.input}
-        placeholder="Harga (Rupiah, contoh: 18000)"
-        keyboardType="number-pad"
-        value={price}
-        onChangeText={setPrice}
-      />
-      <TextInput
-        style={styles.input}
-        placeholder="Stok (contoh: 12)"
-        keyboardType="number-pad"
-        value={stock}
-        onChangeText={setStock}
-      />
+        <Text style={styles.label}>Nama barang</Text>
+        <TextInput
+          ref={nameRef}
+          style={styles.input}
+          placeholder="Contoh: Minyak Goreng Bimoli 1L"
+          placeholderTextColor={colors.secondary}
+          value={name}
+          onChangeText={setName}
+          autoFocus
+        />
+        <Text style={styles.label}>Harga (Rupiah)</Text>
+        <TextInput
+          style={styles.input}
+          placeholder="Contoh: 18000"
+          placeholderTextColor={colors.secondary}
+          keyboardType="number-pad"
+          value={price}
+          onChangeText={setPrice}
+        />
+        <Text style={styles.label}>Stok</Text>
+        <TextInput
+          style={styles.input}
+          placeholder="Contoh: 12"
+          placeholderTextColor={colors.secondary}
+          keyboardType="number-pad"
+          value={stock}
+          onChangeText={setStock}
+        />
 
-      {isEdit && (
-        <View style={styles.toggleRow}>
-          <Text style={styles.toggleLabel}>Tampilkan ke pembeli</Text>
-          <Switch value={isActive} onValueChange={setIsActive} />
-        </View>
-      )}
+        {isEdit && (
+          <View style={styles.toggleRow}>
+            <Text style={styles.toggleLabel}>Tampilkan ke pembeli</Text>
+            <Switch
+              value={isActive}
+              onValueChange={setIsActive}
+              accessibilityLabel="Tampilkan barang ke pembeli"
+            />
+          </View>
+        )}
 
-      {!isEdit && (
+        {!isEdit && (
+          <Pressable
+            style={[styles.button, styles.secondaryButton]}
+            onPress={() => save(true)}
+            disabled={submitting}
+            accessibilityRole="button">
+            {submitting ? (
+              <ActivityIndicator color={colors.primary} />
+            ) : (
+              <Text style={styles.secondaryButtonText}>Simpan & Tambah Lagi</Text>
+            )}
+          </Pressable>
+        )}
+
         <Pressable
-          style={[styles.button, styles.secondaryButton]}
-          onPress={() => save(true)}
-          disabled={submitting}>
+          style={styles.button}
+          onPress={() => save(false)}
+          disabled={submitting}
+          accessibilityRole="button">
           {submitting ? (
-            <ActivityIndicator />
+            <ActivityIndicator color={colors.white} />
           ) : (
-            <Text style={styles.secondaryButtonText}>Simpan & Tambah Lagi</Text>
+            <Text style={styles.buttonText}>
+              {isEdit ? 'Simpan Perubahan' : 'Simpan & Selesai'}
+            </Text>
           )}
         </Pressable>
-      )}
 
-      <Pressable style={styles.button} onPress={() => save(false)} disabled={submitting}>
-        {submitting ? (
-          <ActivityIndicator color="#fff" />
-        ) : (
-          <Text style={styles.buttonText}>{isEdit ? 'Simpan Perubahan' : 'Simpan & Selesai'}</Text>
-        )}
-      </Pressable>
-
-      <Pressable onPress={() => router.back()}>
-        <Text style={styles.cancel}>Batal</Text>
-      </Pressable>
-    </ScrollView>
+        <Pressable onPress={() => router.back()} hitSlop={12} style={styles.cancelWrap}>
+          <Text style={styles.cancel}>Batal</Text>
+        </Pressable>
+      </ScrollView>
+    </KeyboardAvoidingView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flexGrow: 1, padding: 24, paddingTop: 64, gap: 12 },
-  title: { fontSize: 28, fontWeight: 'bold' },
-  counter: { color: '#15803d', fontSize: 14, fontWeight: '500' },
+  container: { ...scrollWrap, gap: 12 },
+  backWrap: { alignSelf: 'flex-start', paddingVertical: 12 },
+  back: { color: colors.primary, fontSize: 16, fontWeight: '600' },
+  title: { fontSize: 28, fontWeight: 'bold', color: colors.text },
+  achievement: {
+    backgroundColor: colors.amberSoft,
+    borderWidth: 1,
+    borderColor: colors.amberSoftBorder,
+    borderRadius: radius.md,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    alignSelf: 'flex-start',
+  },
+  achievementText: { color: '#854d0e', fontSize: 14, fontWeight: '700' },
+  label: { fontSize: 13, fontWeight: '700', color: colors.body, marginTop: 4 },
   input: {
     borderWidth: 1,
-    borderColor: '#ccc',
-    borderRadius: 8,
+    borderColor: colors.inputBorder,
+    borderRadius: radius.md,
     padding: 12,
     fontSize: 16,
-    backgroundColor: '#fff',
+    backgroundColor: colors.card,
+    color: colors.text,
   },
   toggleRow: {
     flexDirection: 'row',
@@ -166,19 +215,20 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     paddingVertical: 4,
   },
-  toggleLabel: { fontSize: 15, color: '#444' },
+  toggleLabel: { fontSize: 15, color: colors.body },
   button: {
-    backgroundColor: '#16a34a',
-    borderRadius: 8,
+    backgroundColor: colors.primary,
+    borderRadius: radius.md,
     padding: 14,
     alignItems: 'center',
   },
   secondaryButton: {
-    backgroundColor: '#f0fdf4',
+    backgroundColor: colors.primarySoft,
     borderWidth: 2,
-    borderColor: '#16a34a',
+    borderColor: colors.primary,
   },
-  secondaryButtonText: { color: '#15803d', fontSize: 16, fontWeight: '600' },
-  buttonText: { color: '#fff', fontSize: 16, fontWeight: '600' },
-  cancel: { textAlign: 'center', color: '#666', marginTop: 8, fontSize: 14 },
+  secondaryButtonText: { color: colors.primaryDark, fontSize: 16, fontWeight: '600' },
+  buttonText: { color: colors.white, fontSize: 16, fontWeight: '600' },
+  cancelWrap: { alignSelf: 'center', paddingVertical: 12, marginTop: 4 },
+  cancel: { textAlign: 'center', color: colors.body, fontSize: 14 },
 });

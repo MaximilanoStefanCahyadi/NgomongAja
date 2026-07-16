@@ -9,12 +9,14 @@ import { useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
+  Animated,
   FlatList,
   Pressable,
   StyleSheet,
   Text,
   View,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { formatRupiah } from '@/lib/format';
 import { matchOrder, type MatchResult } from '@/lib/matching';
@@ -22,12 +24,15 @@ import { parseTranscript } from '@/lib/nlp';
 import { setOrderDraft } from '@/lib/order-draft';
 import { listActiveProducts } from '@/lib/products';
 import { transcribeAudio } from '@/lib/stt';
+import { colors, radius, screenWrap, spacing } from '@/lib/theme';
 
 const MAX_RECORDING_SECONDS = 60;
+const WARN_AT_SECONDS = 50; // last 10 seconds: red timer + countdown hint
 
 type Phase = 'idle' | 'recording' | 'processing' | 'done' | 'error';
 
 export default function VoiceOrder() {
+  const insets = useSafeAreaInsets();
   const { id: storeId } = useLocalSearchParams<{ id: string }>();
   const recorder = useAudioRecorder(RecordingPresets.HIGH_QUALITY);
 
@@ -40,12 +45,29 @@ export default function VoiceOrder() {
   // re-speak their whole list (PRD B-2).
   const audioUriRef = useRef<string | null>(null);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  // Gentle pulse on the stop button while recording ("I'm listening").
+  const pulse = useRef(new Animated.Value(1)).current;
 
   useEffect(() => {
     return () => {
       if (timerRef.current) clearInterval(timerRef.current);
     };
   }, []);
+
+  useEffect(() => {
+    if (phase !== 'recording') return;
+    const loop = Animated.loop(
+      Animated.sequence([
+        Animated.timing(pulse, { toValue: 1.08, duration: 600, useNativeDriver: true }),
+        Animated.timing(pulse, { toValue: 1, duration: 600, useNativeDriver: true }),
+      ])
+    );
+    loop.start();
+    return () => {
+      loop.stop();
+      pulse.setValue(1);
+    };
+  }, [phase, pulse]);
 
   const startRecording = async () => {
     const permission = await AudioModule.requestRecordingPermissionsAsync();
@@ -75,6 +97,29 @@ export default function VoiceOrder() {
       return;
     }
     await processAudio();
+  };
+
+  // Leaving mid-recording throws the take away — ask first.
+  const goBack = () => {
+    if (phase !== 'recording') {
+      router.back();
+      return;
+    }
+    Alert.alert('Berhenti merekam?', 'Rekamanmu akan hilang.', [
+      { text: 'Lanjut Merekam', style: 'cancel' },
+      {
+        text: 'Ya, keluar',
+        style: 'destructive',
+        onPress: async () => {
+          if (timerRef.current) clearInterval(timerRef.current);
+          try {
+            await recorder.stop();
+          } catch {}
+          audioUriRef.current = null; // discard the take
+          router.back();
+        },
+      },
+    ]);
   };
 
   // Transcribe → parse → match. Reused as-is by "Coba lagi".
@@ -108,10 +153,12 @@ export default function VoiceOrder() {
     setPhase('idle');
   };
 
+  const nearLimit = seconds >= WARN_AT_SECONDS;
+
   return (
-    <View style={styles.container}>
-      <Pressable onPress={() => router.back()}>
-        <Text style={styles.back}>‹ Kembali</Text>
+    <View style={[styles.container, { paddingTop: insets.top + 12 }]}>
+      <Pressable onPress={goBack} hitSlop={12} style={styles.backWrap}>
+        <Text style={styles.back}>‹ Toko</Text>
       </Pressable>
       <Text style={styles.title}>Ngomong Aja 🎤</Text>
 
@@ -121,7 +168,11 @@ export default function VoiceOrder() {
             Sebutkan pesananmu seperti bicara ke penjual, contohnya:{'\n'}
             "mau pesen minyak goreng dua liter sama telur setengah kilo"
           </Text>
-          <Pressable style={styles.recordButton} onPress={startRecording}>
+          <Pressable
+            style={styles.recordButton}
+            onPress={startRecording}
+            accessibilityRole="button"
+            accessibilityLabel="Mulai bicara">
             <Text style={styles.recordButtonText}>🎤{'\n'}Mulai Bicara</Text>
           </Pressable>
         </View>
@@ -129,20 +180,32 @@ export default function VoiceOrder() {
 
       {phase === 'recording' && (
         <View style={styles.center}>
-          <Text style={styles.timer}>
+          <Text style={[styles.timer, nearLimit && styles.timerWarn]}>
             {String(Math.floor(seconds / 60)).padStart(1, '0')}:
             {String(seconds % 60).padStart(2, '0')} / 1:00
           </Text>
-          <Text style={styles.hint}>Sedang merekam… bicara yang jelas ya.</Text>
-          <Pressable style={[styles.recordButton, styles.stopButton]} onPress={stopRecording}>
-            <Text style={styles.recordButtonText}>⏹{'\n'}Selesai</Text>
-          </Pressable>
+          {nearLimit ? (
+            <Text style={styles.timeLeftWarn}>
+              ⏰ {MAX_RECORDING_SECONDS - seconds} detik lagi…
+            </Text>
+          ) : (
+            <Text style={styles.hint}>Sedang merekam… bicara yang jelas ya.</Text>
+          )}
+          <Animated.View style={{ transform: [{ scale: pulse }] }}>
+            <Pressable
+              style={[styles.recordButton, styles.stopButton]}
+              onPress={stopRecording}
+              accessibilityRole="button"
+              accessibilityLabel="Selesai merekam">
+              <Text style={styles.recordButtonText}>⏹{'\n'}Selesai</Text>
+            </Pressable>
+          </Animated.View>
         </View>
       )}
 
       {phase === 'processing' && (
         <View style={styles.center}>
-          <ActivityIndicator size="large" />
+          <ActivityIndicator size="large" color={colors.primary} />
           <Text style={styles.hint}>{processingStep}</Text>
         </View>
       )}
@@ -156,7 +219,7 @@ export default function VoiceOrder() {
           <Pressable style={styles.button} onPress={processAudio}>
             <Text style={styles.buttonText}>Coba Lagi</Text>
           </Pressable>
-          <Pressable onPress={reset}>
+          <Pressable onPress={reset} hitSlop={12} style={styles.linkWrap}>
             <Text style={styles.linkText}>Rekam ulang dari awal</Text>
           </Pressable>
         </View>
@@ -234,7 +297,7 @@ export default function VoiceOrder() {
             }}>
             <Text style={styles.buttonText}>Lanjut Periksa Pesanan</Text>
           </Pressable>
-          <Pressable onPress={reset}>
+          <Pressable onPress={reset} hitSlop={12} style={styles.linkWrap}>
             <Text style={styles.linkText}>Rekam ulang</Text>
           </Pressable>
         </View>
@@ -244,48 +307,57 @@ export default function VoiceOrder() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, padding: 24, paddingTop: 64 },
-  back: { color: '#16a34a', fontSize: 16, marginBottom: 8 },
-  title: { fontSize: 28, fontWeight: 'bold', marginBottom: 8 },
+  container: { ...screenWrap },
+  backWrap: { alignSelf: 'flex-start', paddingVertical: 12 },
+  back: { color: colors.primary, fontSize: 16, fontWeight: '600' },
+  title: { fontSize: 28, fontWeight: 'bold', marginBottom: spacing.sm, color: colors.text },
   center: { flex: 1, justifyContent: 'center', alignItems: 'center', gap: 20 },
-  hint: { fontSize: 15, color: '#555', textAlign: 'center', lineHeight: 22 },
-  timer: { fontSize: 40, fontWeight: 'bold', fontVariant: ['tabular-nums'] },
+  hint: { fontSize: 15, color: colors.body, textAlign: 'center', lineHeight: 22 },
+  timer: {
+    fontSize: 40,
+    fontWeight: 'bold',
+    fontVariant: ['tabular-nums'],
+    color: colors.text,
+  },
+  timerWarn: { color: colors.danger },
+  timeLeftWarn: { fontSize: 16, fontWeight: '700', color: colors.danger },
   recordButton: {
     width: 140,
     height: 140,
     borderRadius: 70,
-    backgroundColor: '#16a34a',
+    backgroundColor: colors.primary,
     justifyContent: 'center',
     alignItems: 'center',
   },
-  stopButton: { backgroundColor: '#dc2626' },
+  stopButton: { backgroundColor: colors.danger },
   recordButtonText: {
-    color: '#fff',
+    color: colors.white,
     fontSize: 18,
     fontWeight: 'bold',
     textAlign: 'center',
   },
-  transcriptLabel: { fontSize: 13, color: '#777' },
-  transcript: { fontSize: 15, fontStyle: 'italic', marginTop: 4 },
+  transcriptLabel: { fontSize: 13, color: colors.secondary },
+  transcript: { fontSize: 15, fontStyle: 'italic', marginTop: 4, color: colors.text },
   resultRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#fff',
-    borderRadius: 8,
+    backgroundColor: colors.card,
+    borderRadius: radius.md,
     padding: 14,
     borderWidth: 1,
-    borderColor: '#eee',
+    borderColor: colors.border,
     gap: 12,
   },
   resultIcon: { fontSize: 20 },
-  resultName: { fontSize: 15, fontWeight: '500' },
-  resultMeta: { fontSize: 13, color: '#777', marginTop: 2 },
+  resultName: { fontSize: 15, fontWeight: '500', color: colors.text },
+  resultMeta: { fontSize: 13, color: colors.body, marginTop: 2 },
   button: {
-    backgroundColor: '#16a34a',
-    borderRadius: 8,
+    backgroundColor: colors.primary,
+    borderRadius: radius.md,
     padding: 14,
     alignItems: 'center',
   },
-  buttonText: { color: '#fff', fontSize: 16, fontWeight: '600' },
-  linkText: { textAlign: 'center', color: '#666', marginTop: 12, fontSize: 14 },
+  buttonText: { color: colors.white, fontSize: 16, fontWeight: '600' },
+  linkWrap: { alignSelf: 'center', paddingVertical: 12 },
+  linkText: { textAlign: 'center', color: colors.body, fontSize: 14 },
 });

@@ -4,17 +4,23 @@ import { useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
+  KeyboardAvoidingView,
+  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
   Text,
   TextInput,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { useAuth } from '@/lib/auth-context';
+import { friendlyError } from '@/lib/errors';
 import { createStore } from '@/lib/stores';
+import { colors, radius, scrollWrap } from '@/lib/theme';
 
 export default function NewStore() {
+  const insets = useSafeAreaInsets();
   const { profile } = useAuth();
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
@@ -67,100 +73,126 @@ export default function NewStore() {
       // replace (not push): "back" from the store page should go to the list,
       // not return to this already-submitted form.
       router.replace({ pathname: '/(seller)/store/[id]', params: { id: store.id } });
-    } catch (e: any) {
-      Alert.alert('Gagal membuat toko', e.message);
+    } catch (e) {
+      Alert.alert('Gagal membuat toko', friendlyError(e));
     } finally {
       setSubmitting(false);
     }
   };
 
   return (
-    <ScrollView contentContainerStyle={styles.container}>
-      <Text style={styles.title}>Toko Baru</Text>
+    <KeyboardAvoidingView
+      style={{ flex: 1, backgroundColor: colors.bg }}
+      behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+      <ScrollView
+        contentContainerStyle={[styles.container, { paddingTop: insets.top + 12 }]}
+        keyboardShouldPersistTaps="handled">
+        <Pressable onPress={() => router.back()} hitSlop={12} style={styles.backWrap}>
+          <Text style={styles.back}>‹ Toko Saya</Text>
+        </Pressable>
+        <Text style={styles.title}>Toko Baru 🏪</Text>
 
-      <TextInput
-        style={styles.input}
-        placeholder="Nama toko (contoh: Warung Bu Rina)"
-        value={name}
-        onChangeText={setName}
-      />
-      <TextInput
-        style={[styles.input, styles.multiline]}
-        placeholder="Deskripsi singkat (opsional)"
-        multiline
-        value={description}
-        onChangeText={setDescription}
-      />
+        <Text style={styles.label}>Nama toko</Text>
+        <TextInput
+          style={styles.input}
+          placeholder="Contoh: Warung Bu Rina"
+          placeholderTextColor={colors.secondary}
+          value={name}
+          onChangeText={setName}
+        />
+        <Text style={styles.label}>Deskripsi singkat (opsional)</Text>
+        <TextInput
+          style={[styles.input, styles.multiline]}
+          placeholder="Contoh: Sembako lengkap, buka 06.00–21.00"
+          placeholderTextColor={colors.secondary}
+          multiline
+          value={description}
+          onChangeText={setDescription}
+        />
 
-      <Text style={styles.label}>Lokasi toko</Text>
-      <Pressable style={styles.locationButton} onPress={useMyLocation} disabled={locating}>
-        {locating ? (
-          <ActivityIndicator />
-        ) : (
-          <Text style={styles.locationButtonText}>
-            {coords
-              ? `✓ Lokasi tersimpan (${coords.lat.toFixed(5)}, ${coords.lng.toFixed(5)})`
-              : '📍 Gunakan lokasi saat ini'}
-          </Text>
-        )}
-      </Pressable>
-      <TextInput
-        style={styles.input}
-        placeholder="Atau tempel link Google Maps (opsional)"
-        autoCapitalize="none"
-        value={gmapsUrl}
-        onChangeText={setGmapsUrl}
-      />
-      <Text style={styles.hint}>
-        Tips: tekan tombol lokasi saat kamu sedang berada di toko, supaya pembeli
-        menemukan alamat yang benar.
-      </Text>
+        <Text style={styles.label}>Lokasi toko</Text>
+        <Pressable
+          style={styles.locationButton}
+          onPress={useMyLocation}
+          disabled={locating}
+          accessibilityRole="button">
+          {locating ? (
+            <ActivityIndicator color={colors.primary} />
+          ) : (
+            <Text style={styles.locationButtonText}>
+              {coords
+                ? `✓ Lokasi tersimpan (${coords.lat.toFixed(5)}, ${coords.lng.toFixed(5)})`
+                : '📍 Gunakan lokasi saat ini'}
+            </Text>
+          )}
+        </Pressable>
+        <TextInput
+          style={styles.input}
+          placeholder="Atau tempel link Google Maps (opsional)"
+          placeholderTextColor={colors.secondary}
+          autoCapitalize="none"
+          value={gmapsUrl}
+          onChangeText={setGmapsUrl}
+        />
+        <Text style={styles.hint}>
+          Tips: tekan tombol lokasi saat kamu sedang berada di toko, supaya pembeli
+          menemukan alamat yang benar.
+        </Text>
 
-      <Pressable style={styles.button} onPress={handleCreate} disabled={submitting}>
-        {submitting ? (
-          <ActivityIndicator color="#fff" />
-        ) : (
-          <Text style={styles.buttonText}>Buat Toko</Text>
-        )}
-      </Pressable>
+        <Pressable
+          style={styles.button}
+          onPress={handleCreate}
+          disabled={submitting}
+          accessibilityRole="button">
+          {submitting ? (
+            <ActivityIndicator color={colors.white} />
+          ) : (
+            <Text style={styles.buttonText}>Buat Toko</Text>
+          )}
+        </Pressable>
 
-      <Pressable onPress={() => router.back()}>
-        <Text style={styles.cancel}>Batal</Text>
-      </Pressable>
-    </ScrollView>
+        <Pressable onPress={() => router.back()} hitSlop={12} style={styles.cancelWrap}>
+          <Text style={styles.cancel}>Batal</Text>
+        </Pressable>
+      </ScrollView>
+    </KeyboardAvoidingView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flexGrow: 1, padding: 24, paddingTop: 64, gap: 12 },
-  title: { fontSize: 28, fontWeight: 'bold', marginBottom: 8 },
-  label: { fontSize: 14, color: '#444', marginTop: 8 },
+  container: { ...scrollWrap, gap: 12 },
+  backWrap: { alignSelf: 'flex-start', paddingVertical: 12 },
+  back: { color: colors.primary, fontSize: 16, fontWeight: '600' },
+  title: { fontSize: 28, fontWeight: 'bold', marginBottom: 8, color: colors.text },
+  label: { fontSize: 13, fontWeight: '700', color: colors.body, marginTop: 4 },
   input: {
     borderWidth: 1,
-    borderColor: '#ccc',
-    borderRadius: 8,
+    borderColor: colors.inputBorder,
+    borderRadius: radius.md,
     padding: 12,
     fontSize: 16,
-    backgroundColor: '#fff',
+    backgroundColor: colors.card,
+    color: colors.text,
   },
   multiline: { minHeight: 70, textAlignVertical: 'top' },
   locationButton: {
     borderWidth: 2,
-    borderColor: '#16a34a',
-    borderRadius: 8,
+    borderColor: colors.primary,
+    borderRadius: radius.md,
     padding: 12,
     alignItems: 'center',
-    backgroundColor: '#f0fdf4',
+    backgroundColor: colors.primarySoft,
   },
-  locationButtonText: { color: '#15803d', fontSize: 15, fontWeight: '600' },
-  hint: { fontSize: 12, color: '#888', lineHeight: 17 },
+  locationButtonText: { color: colors.primaryDark, fontSize: 15, fontWeight: '600' },
+  hint: { fontSize: 12, color: colors.secondary, lineHeight: 17 },
   button: {
-    backgroundColor: '#16a34a',
-    borderRadius: 8,
+    backgroundColor: colors.primary,
+    borderRadius: radius.md,
     padding: 14,
     alignItems: 'center',
     marginTop: 8,
   },
-  buttonText: { color: '#fff', fontSize: 16, fontWeight: '600' },
-  cancel: { textAlign: 'center', color: '#666', marginTop: 16, fontSize: 14 },
+  buttonText: { color: colors.white, fontSize: 16, fontWeight: '600' },
+  cancelWrap: { alignSelf: 'center', paddingVertical: 12, marginTop: 8 },
+  cancel: { textAlign: 'center', color: colors.body, fontSize: 14 },
 });

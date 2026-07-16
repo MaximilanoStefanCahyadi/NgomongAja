@@ -9,6 +9,7 @@ export type Store = {
   lng: number | null;
   gmaps_url: string | null;
   is_active: boolean;
+  delivery_fee: number;
   created_at: string;
 };
 
@@ -55,6 +56,12 @@ export async function setStoreActive(id: string, isActive: boolean): Promise<voi
     .from('stores')
     .update({ is_active: isActive })
     .eq('id', id);
+  if (error) throw error;
+}
+
+// PA-8: each store sets its own delivery fee.
+export async function setStoreDeliveryFee(id: string, fee: number): Promise<void> {
+  const { error } = await supabase.from('stores').update({ delivery_fee: fee }).eq('id', id);
   if (error) throw error;
 }
 

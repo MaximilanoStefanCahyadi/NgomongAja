@@ -2,6 +2,7 @@ import { Redirect } from 'expo-router';
 import { ActivityIndicator, View } from 'react-native';
 
 import { useAuth } from '@/lib/auth-context';
+import { colors } from '@/lib/theme';
 
 // Entry point: decides where the user lands when the app opens.
 export default function Index() {
@@ -9,8 +10,14 @@ export default function Index() {
 
   if (loading) {
     return (
-      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
-        <ActivityIndicator size="large" />
+      <View
+        style={{
+          flex: 1,
+          justifyContent: 'center',
+          alignItems: 'center',
+          backgroundColor: colors.bg,
+        }}>
+        <ActivityIndicator size="large" color={colors.primary} />
       </View>
     );
   }

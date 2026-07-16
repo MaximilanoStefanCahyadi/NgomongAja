@@ -10,7 +10,9 @@ import {
   View,
 } from 'react-native';
 
+import { friendlyError } from '@/lib/errors';
 import { supabase } from '@/lib/supabase';
+import { colors, radius, spacing } from '@/lib/theme';
 
 export default function Login() {
   const [email, setEmail] = useState('');
@@ -30,7 +32,7 @@ export default function Login() {
     setSubmitting(false);
 
     if (error) {
-      Alert.alert('Gagal masuk', error.message);
+      Alert.alert('Gagal masuk', friendlyError(error));
       return;
     }
     // Success: the AuthProvider picks up the new session automatically;
@@ -41,8 +43,9 @@ export default function Login() {
   return (
     <View style={styles.container}>
       <Text style={styles.title}>NgomongAja</Text>
-      <Text style={styles.subtitle}>Belanja di warung, cukup ngomong aja.</Text>
+      <Text style={styles.subtitle}>Belanja di warung, cukup ngomong aja. 🛒</Text>
 
+      <Text style={styles.label}>Email</Text>
       <TextInput
         style={styles.input}
         placeholder="Email"
@@ -51,6 +54,7 @@ export default function Login() {
         value={email}
         onChangeText={setEmail}
       />
+      <Text style={styles.label}>Kata sandi</Text>
       <TextInput
         style={styles.input}
         placeholder="Kata sandi"
@@ -67,32 +71,48 @@ export default function Login() {
         )}
       </Pressable>
 
-      <Link href="/(auth)/register" style={styles.link}>
-        Belum punya akun? Daftar di sini
+      <Link href="/(auth)/register" asChild>
+        <Pressable hitSlop={12} style={styles.linkWrap} accessibilityRole="link">
+          <Text style={styles.link}>Belum punya akun? Daftar di sini</Text>
+        </Pressable>
       </Link>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, justifyContent: 'center', padding: 24, gap: 12 },
-  title: { fontSize: 32, fontWeight: 'bold', textAlign: 'center' },
-  subtitle: { fontSize: 14, textAlign: 'center', color: '#666', marginBottom: 24 },
+  container: {
+    flex: 1,
+    justifyContent: 'center',
+    padding: spacing.xl,
+    gap: spacing.sm,
+    backgroundColor: colors.bg,
+  },
+  title: { fontSize: 32, fontWeight: 'bold', textAlign: 'center', color: colors.text },
+  subtitle: {
+    fontSize: 14,
+    textAlign: 'center',
+    color: colors.body,
+    marginBottom: spacing.xl,
+  },
+  label: { fontSize: 13, fontWeight: '700', color: colors.body, marginTop: spacing.xs },
   input: {
     borderWidth: 1,
-    borderColor: '#ccc',
-    borderRadius: 8,
+    borderColor: colors.inputBorder,
+    borderRadius: radius.md,
     padding: 12,
     fontSize: 16,
-    backgroundColor: '#fff',
+    backgroundColor: colors.card,
+    color: colors.text,
   },
   button: {
-    backgroundColor: '#16a34a',
-    borderRadius: 8,
+    backgroundColor: colors.primary,
+    borderRadius: radius.md,
     padding: 14,
     alignItems: 'center',
-    marginTop: 8,
+    marginTop: spacing.sm,
   },
-  buttonText: { color: '#fff', fontSize: 16, fontWeight: '600' },
-  link: { textAlign: 'center', color: '#16a34a', marginTop: 16, fontSize: 14 },
+  buttonText: { color: colors.white, fontSize: 16, fontWeight: '600' },
+  linkWrap: { alignSelf: 'center', paddingVertical: 12, marginTop: spacing.xs },
+  link: { textAlign: 'center', color: colors.primary, fontSize: 14, fontWeight: '600' },
 });

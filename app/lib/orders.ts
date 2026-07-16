@@ -29,11 +29,15 @@ export async function placeOrder(params: {
 }
 
 // Buyer's simulated "pay now" for gopay/transfer (PA-12: demo, no real money).
+// The `.eq('status','pending')` guard prevents a race where the order was
+// cancelled/rejected (payment already 'voided') between render and tap —
+// without it, that voided payment would flip back to 'paid'.
 export async function markPaidByBuyer(orderId: string): Promise<void> {
   const { error } = await supabase
     .from('payments')
     .update({ status: 'paid', paid_at: new Date().toISOString() })
-    .eq('order_id', orderId);
+    .eq('order_id', orderId)
+    .eq('status', 'pending');
   if (error) throw error;
 }
 
@@ -63,7 +67,15 @@ export type OrderRow = {
 export type OrderItemRow = {
   quantity: number;
   unit_price: number;
-  products: { name: string } | null;
+  // Full product row so "Pesan Lagi" (PA-5) can rebuild a cart from history.
+  products: {
+    id: string;
+    store_id: string;
+    name: string;
+    price: number;
+    stock: number;
+    is_active: boolean;
+  } | null;
 };
 
 const ORDER_SELECT =
@@ -108,7 +120,7 @@ export async function getOrder(orderId: string): Promise<OrderRow> {
 export async function listOrderItems(orderId: string): Promise<OrderItemRow[]> {
   const { data, error } = await supabase
     .from('order_items')
-    .select('quantity, unit_price, products(name)')
+    .select('quantity, unit_price, products(id, store_id, name, price, stock, is_active)')
     .eq('order_id', orderId);
   if (error) throw error;
   return data as unknown as OrderItemRow[];

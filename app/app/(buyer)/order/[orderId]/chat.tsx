@@ -1,28 +1,31 @@
 import { router, useLocalSearchParams } from 'expo-router';
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { OrderChat } from '@/components/order-chat';
 import { useAuth } from '@/lib/auth-context';
+import { colors } from '@/lib/theme';
 
 export default function BuyerOrderChat() {
+  const insets = useSafeAreaInsets();
   const { orderId } = useLocalSearchParams<{ orderId: string }>();
   const { profile } = useAuth();
 
   if (!orderId || !profile) {
     return (
       <View style={styles.center}>
-        <ActivityIndicator size="large" />
+        <ActivityIndicator size="large" color={colors.primary} />
       </View>
     );
   }
 
   return (
     <View style={styles.container}>
-      <View style={styles.header}>
-        <Pressable onPress={() => router.back()}>
-          <Text style={styles.back}>‹ Kembali</Text>
+      <View style={[styles.header, { paddingTop: insets.top + 12 }]}>
+        <Pressable onPress={() => router.back()} hitSlop={12} style={styles.backWrap}>
+          <Text style={styles.back}>‹ Pesanan</Text>
         </Pressable>
-        <Text style={styles.title}>Chat Pesanan</Text>
+        <Text style={styles.title}>Chat Penjual</Text>
       </View>
       <OrderChat orderId={orderId} myId={profile.id} />
     </View>
@@ -30,17 +33,22 @@ export default function BuyerOrderChat() {
 }
 
 const styles = StyleSheet.create({
-  center: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-  container: { flex: 1 },
+  center: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: colors.bg,
+  },
+  container: { flex: 1, backgroundColor: colors.bg },
   header: {
     paddingHorizontal: 24,
-    paddingTop: 64,
     paddingBottom: 12,
     borderBottomWidth: 1,
-    borderBottomColor: '#eee',
-    backgroundColor: '#fff',
+    borderBottomColor: colors.border,
+    backgroundColor: colors.card,
     gap: 4,
   },
-  back: { color: '#16a34a', fontSize: 16 },
-  title: { fontSize: 20, fontWeight: 'bold' },
+  backWrap: { alignSelf: 'flex-start', paddingVertical: 6 },
+  back: { color: colors.primary, fontSize: 16, fontWeight: '600' },
+  title: { fontSize: 20, fontWeight: 'bold', color: colors.text },
 });

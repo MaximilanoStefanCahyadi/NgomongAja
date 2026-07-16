@@ -9,40 +9,13 @@ import {
   Text,
   View,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { useAuth } from '@/lib/auth-context';
 import { formatRupiah } from '@/lib/format';
-import {
-  expireStaleOrders,
-  listMyOrders,
-  type OrderRow,
-  type OrderStatus,
-} from '@/lib/orders';
-
-const STATUS_LABELS: Record<OrderStatus, string> = {
-  pending: 'Menunggu',
-  accepted: 'Diproses',
-  ready: 'Siap',
-  completed: 'Selesai',
-  rejected: 'Ditolak',
-  cancelled: 'Dibatalkan',
-};
-
-// chip colors: pending amber, accepted blue, ready teal, completed green, rejected/cancelled red
-const STATUS_COLORS: Record<OrderStatus, { bg: string; fg: string }> = {
-  pending: { bg: '#fef3c7', fg: '#92400e' },
-  accepted: { bg: '#dbeafe', fg: '#1e40af' },
-  ready: { bg: '#ccfbf1', fg: '#0f766e' },
-  completed: { bg: '#dcfce7', fg: '#15803d' },
-  rejected: { bg: '#fee2e2', fg: '#b91c1c' },
-  cancelled: { bg: '#fee2e2', fg: '#b91c1c' },
-};
-
-const PAYMENT_LABELS: Record<'pending' | 'paid' | 'voided', string> = {
-  pending: 'Belum dibayar',
-  paid: 'Lunas',
-  voided: 'Dibatalkan',
-};
+import { expireStaleOrders, listMyOrders, type OrderRow } from '@/lib/orders';
+import { PAYMENT_BADGE, STATUS_CHIP } from '@/lib/status-ui';
+import { colors, radius, screenWrap, spacing } from '@/lib/theme';
 
 // "2026-07-15T…" -> "15 Jul 2026"
 function formatDate(iso: string): string {
@@ -54,8 +27,10 @@ function formatDate(iso: string): string {
 }
 
 export default function MyOrders() {
+  const insets = useSafeAreaInsets();
   const { profile } = useAuth();
   const [orders, setOrders] = useState<OrderRow[] | null>(null);
+  const [loadFailed, setLoadFailed] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
 
   const load = useCallback(async () => {
@@ -64,10 +39,21 @@ export default function MyOrders() {
     setOrders(await listMyOrders(profile.id));
   }, [profile]);
 
+  const retry = useCallback(() => {
+    setLoadFailed(false);
+    setOrders(null);
+    load().catch((e) => {
+      console.warn('listMyOrders:', e.message);
+      setLoadFailed(true);
+      setOrders([]);
+    });
+  }, [load]);
+
   useFocusEffect(
     useCallback(() => {
       load().catch((e) => {
         console.warn('listMyOrders:', e.message);
+        setLoadFailed(true);
         setOrders([]);
       });
     }, [load])
@@ -75,21 +61,22 @@ export default function MyOrders() {
 
   const onRefresh = async () => {
     setRefreshing(true);
-    await load().catch(() => {});
+    setLoadFailed(false);
+    await load().catch(() => setLoadFailed(true));
     setRefreshing(false);
   };
 
   if (!orders) {
     return (
       <View style={styles.center}>
-        <ActivityIndicator size="large" />
+        <ActivityIndicator size="large" color={colors.primary} />
       </View>
     );
   }
 
   return (
-    <View style={styles.container}>
-      <Pressable onPress={() => router.back()}>
+    <View style={[styles.container, { paddingTop: insets.top + 12 }]}>
+      <Pressable onPress={() => router.back()} hitSlop={12} style={styles.backWrap}>
         <Text style={styles.back}>‹ Beranda</Text>
       </Pressable>
       <Text style={styles.title}>Pesanan Saya</Text>
@@ -100,13 +87,31 @@ export default function MyOrders() {
         contentContainerStyle={{ gap: 10, paddingVertical: 12 }}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
         ListEmptyComponent={
-          <Text style={styles.empty}>
-            Belum ada pesanan. Cari warung terdekat dan ngomong aja!
-          </Text>
+          loadFailed ? (
+            <View style={styles.emptyBox}>
+              <Text style={styles.empty}>Gagal memuat. Periksa internetmu.</Text>
+              <Pressable style={styles.emptyButton} onPress={retry} accessibilityRole="button">
+                <Text style={styles.emptyButtonText}>Coba Lagi</Text>
+              </Pressable>
+            </View>
+          ) : (
+            <View style={styles.emptyBox}>
+              <Text style={styles.empty}>
+                🧾 Belum ada pesanan. Yuk pesan dari warung terdekat!
+              </Text>
+              <Pressable
+                style={styles.emptyButton}
+                onPress={() => router.back()}
+                accessibilityRole="button">
+                <Text style={styles.emptyButtonText}>Cari Warung</Text>
+              </Pressable>
+            </View>
+          )
         }
         renderItem={({ item: o }) => {
-          const chip = STATUS_COLORS[o.status];
+          const chip = STATUS_CHIP[o.status];
           const payment = o.payments[0];
+          const payBadge = payment ? PAYMENT_BADGE[payment.status] : null;
           return (
             <Pressable
               style={styles.card}
@@ -121,19 +126,19 @@ export default function MyOrders() {
                   {o.stores?.name ?? 'Toko'}
                 </Text>
                 <Text style={[styles.chip, { backgroundColor: chip.bg, color: chip.fg }]}>
-                  {STATUS_LABELS[o.status]}
+                  {chip.label}
                 </Text>
               </View>
               <Text style={styles.date}>{formatDate(o.created_at)}</Text>
               <View style={styles.cardFooter}>
                 <Text style={styles.total}>{formatRupiah(o.total)}</Text>
-                {payment && (
+                {payBadge && (
                   <Text
                     style={[
                       styles.payBadge,
-                      payment.status === 'paid' && styles.payBadgePaid,
+                      { backgroundColor: payBadge.bg, color: payBadge.fg },
                     ]}>
-                    {PAYMENT_LABELS[payment.status]}
+                    {payBadge.label}
                   </Text>
                 )}
               </View>
@@ -146,40 +151,56 @@ export default function MyOrders() {
 }
 
 const styles = StyleSheet.create({
-  center: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-  container: { flex: 1, padding: 24, paddingTop: 64 },
-  back: { color: '#16a34a', fontSize: 16, marginBottom: 8 },
-  title: { fontSize: 28, fontWeight: 'bold' },
-  empty: { color: '#666', textAlign: 'center', marginTop: 32, lineHeight: 20 },
+  center: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: colors.bg,
+  },
+  container: { ...screenWrap },
+  backWrap: { alignSelf: 'flex-start', paddingVertical: 12 },
+  back: { color: colors.primary, fontSize: 16, fontWeight: '600' },
+  title: { fontSize: 30, fontWeight: '800', color: colors.text },
+  empty: { color: colors.body, textAlign: 'center', marginTop: 32, lineHeight: 20 },
+  emptyBox: { alignItems: 'center', gap: spacing.md },
+  emptyButton: {
+    backgroundColor: colors.primary,
+    borderRadius: radius.md,
+    paddingVertical: 12,
+    paddingHorizontal: 24,
+  },
+  emptyButtonText: { color: colors.white, fontSize: 15, fontWeight: '600' },
   card: {
-    backgroundColor: '#fff',
-    borderRadius: 10,
+    backgroundColor: colors.card,
+    borderRadius: radius.lg,
     padding: 16,
     borderWidth: 1,
-    borderColor: '#eee',
+    borderColor: colors.border,
     gap: 6,
   },
-  cardHeader: { flexDirection: 'row', justifyContent: 'space-between', gap: 8 },
-  storeName: { fontSize: 16, fontWeight: '600', flex: 1 },
+  cardHeader: { flexDirection: 'row', justifyContent: 'space-between', gap: spacing.sm },
+  storeName: { fontSize: 16, fontWeight: '600', flex: 1, color: colors.text },
   chip: {
     fontSize: 12,
     fontWeight: '600',
     paddingHorizontal: 10,
     paddingVertical: 4,
-    borderRadius: 999,
+    borderRadius: radius.pill,
     overflow: 'hidden',
   },
-  date: { fontSize: 13, color: '#777' },
-  cardFooter: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  total: { fontSize: 15, fontWeight: 'bold', color: '#15803d' },
+  date: { fontSize: 13, color: colors.body },
+  cardFooter: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  total: { fontSize: 15, fontWeight: 'bold', color: colors.primaryDark },
   payBadge: {
     fontSize: 12,
-    color: '#555',
-    backgroundColor: '#f3f4f6',
+    fontWeight: '600',
     paddingHorizontal: 10,
     paddingVertical: 4,
-    borderRadius: 999,
+    borderRadius: radius.pill,
     overflow: 'hidden',
   },
-  payBadgePaid: { color: '#15803d', backgroundColor: '#dcfce7', fontWeight: '600' },
 });

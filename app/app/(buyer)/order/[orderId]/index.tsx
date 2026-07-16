@@ -10,8 +10,12 @@ import {
   TextInput,
   View,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { friendlyError } from '@/lib/errors';
 import { formatRupiah } from '@/lib/format';
+import type { MatchResult } from '@/lib/matching';
+import { setOrderDraft } from '@/lib/order-draft';
 import {
   getOrder,
   listOrderItems,
@@ -20,33 +24,28 @@ import {
   updateOrderStatus,
   type OrderItemRow,
   type OrderRow,
-  type PaymentMethod,
 } from '@/lib/orders';
 import { getMyReview, submitReview } from '@/lib/reviews';
+import { PAYMENT_BADGE, PAYMENT_METHOD_LABEL } from '@/lib/status-ui';
+import { colors, radius, scrollWrap } from '@/lib/theme';
 
-const METHOD_LABELS: Record<PaymentMethod, string> = {
-  cash: 'COD — bayar di tempat',
-  gopay: 'GoPay',
-  transfer: 'Transfer Bank',
-};
-
-const PAYMENT_LABELS: Record<'pending' | 'paid' | 'voided', string> = {
-  pending: 'Belum dibayar',
-  paid: 'Lunas',
-  voided: 'Dibatalkan',
-};
-
-// The happy path, in order. Rejected/cancelled get a red banner instead.
-const TIMELINE: { key: 'pending' | 'accepted' | 'ready' | 'completed'; label: string }[] = [
-  { key: 'pending', label: 'Menunggu' },
-  { key: 'accepted', label: 'Diproses' },
-  { key: 'ready', label: 'Siap' },
-  { key: 'completed', label: 'Selesai' },
+// The happy path, as a little journey with emoji milestones.
+// Rejected/cancelled get a red banner instead.
+const TIMELINE: {
+  key: 'pending' | 'accepted' | 'ready' | 'completed';
+  label: string;
+  emoji: string;
+}[] = [
+  { key: 'pending', label: 'Menunggu', emoji: '🕐' },
+  { key: 'accepted', label: 'Diproses', emoji: '👨‍🍳' },
+  { key: 'ready', label: 'Siap', emoji: '📦' },
+  { key: 'completed', label: 'Selesai', emoji: '🎉' },
 ];
 
 type MyReview = { rating: number; comment: string | null } | null;
 
 export default function OrderDetail() {
+  const insets = useSafeAreaInsets();
   const { orderId } = useLocalSearchParams<{ orderId: string }>();
   const [order, setOrder] = useState<OrderRow | null>(null);
   const [items, setItems] = useState<OrderItemRow[]>([]);
@@ -80,7 +79,7 @@ export default function OrderDetail() {
   if (!order || !orderId) {
     return (
       <View style={styles.center}>
-        <ActivityIndicator size="large" />
+        <ActivityIndicator size="large" color={colors.primary} />
       </View>
     );
   }
@@ -101,8 +100,8 @@ export default function OrderDetail() {
           try {
             await updateOrderStatus(orderId, 'cancelled');
             await refetch();
-          } catch (e: any) {
-            Alert.alert('Gagal membatalkan', e.message);
+          } catch (e) {
+            Alert.alert('Gagal membatalkan', friendlyError(e));
           } finally {
             setBusy(false);
           }
@@ -116,8 +115,8 @@ export default function OrderDetail() {
     try {
       await markPaidByBuyer(orderId);
       await refetch();
-    } catch (e: any) {
-      Alert.alert('Gagal', e.message);
+    } catch (e) {
+      Alert.alert('Gagal', friendlyError(e));
     } finally {
       setBusy(false);
     }
@@ -129,17 +128,19 @@ export default function OrderDetail() {
     try {
       await submitReview(orderId, rating, comment);
       setMyReview({ rating, comment: comment.trim() || null });
-    } catch (e: any) {
-      Alert.alert('Gagal mengirim ulasan', e.message);
+    } catch (e) {
+      Alert.alert('Gagal mengirim ulasan', friendlyError(e));
     } finally {
       setBusy(false);
     }
   };
 
   return (
-    <ScrollView contentContainerStyle={styles.container} keyboardShouldPersistTaps="handled">
-      <Pressable onPress={() => router.back()}>
-        <Text style={styles.back}>‹ Kembali</Text>
+    <ScrollView
+      contentContainerStyle={[styles.container, { paddingTop: insets.top + 12 }]}
+      keyboardShouldPersistTaps="handled">
+      <Pressable onPress={() => router.back()} hitSlop={12} style={styles.backWrap}>
+        <Text style={styles.back}>‹ Pesanan</Text>
       </Pressable>
       <Text style={styles.title}>{order.stores?.name ?? 'Pesanan'}</Text>
 
@@ -152,23 +153,23 @@ export default function OrderDetail() {
           </Text>
         </View>
       ) : (
-        <View style={styles.timeline}>
-          {TIMELINE.map((step, i) => {
+        <>
+          <Text style={styles.stepSummary} accessibilityLiveRegion="polite">
+            Langkah {currentStep + 1} dari {TIMELINE.length} —{' '}
+            {TIMELINE[currentStep].label} {TIMELINE[currentStep].emoji}
+          </Text>
+          <View style={styles.timeline}>
+            {TIMELINE.map((step, i) => {
             const done = i < currentStep;
             const current = i === currentStep;
+            const active = done || current;
             return (
               <View key={step.key} style={styles.timelineStep}>
                 <View
-                  style={[
-                    styles.dot,
-                    done && styles.dotDone,
-                    current && styles.dotCurrent,
-                  ]}>
-                  <Text style={[styles.dotText, (done || current) && styles.dotTextActive]}>
-                    {done ? '✓' : i + 1}
-                  </Text>
+                  style={[styles.dot, done && styles.dotDone, current && styles.dotCurrent]}>
+                  <Text style={styles.dotEmoji}>{done ? '✓' : step.emoji}</Text>
                 </View>
-                <Text style={[styles.stepLabel, current && styles.stepLabelCurrent]}>
+                <Text style={[styles.stepLabel, active && styles.stepLabelActive]}>
                   {step.label}
                 </Text>
                 {i < TIMELINE.length - 1 && (
@@ -176,8 +177,9 @@ export default function OrderDetail() {
                 )}
               </View>
             );
-          })}
-        </View>
+            })}
+          </View>
+        </>
       )}
 
       <Text style={styles.sectionTitle}>Barang</Text>
@@ -214,14 +216,16 @@ export default function OrderDetail() {
 
       {payment && (
         <View style={styles.paymentRow}>
-          <Text style={styles.paymentMethod}>{METHOD_LABELS[payment.method]}</Text>
+          <Text style={styles.paymentMethod}>{PAYMENT_METHOD_LABEL[payment.method]}</Text>
           <Text
             style={[
               styles.payBadge,
-              payment.status === 'paid' && styles.payBadgePaid,
-              payment.status === 'voided' && styles.payBadgeVoided,
+              {
+                color: PAYMENT_BADGE[payment.status].fg,
+                backgroundColor: PAYMENT_BADGE[payment.status].bg,
+              },
             ]}>
-            {PAYMENT_LABELS[payment.status]}
+            {PAYMENT_BADGE[payment.status].label}
           </Text>
         </View>
       )}
@@ -229,8 +233,12 @@ export default function OrderDetail() {
       {payment && payment.status === 'pending' && payment.method !== 'cash' && !isDead && (
         <>
           <Text style={styles.demoBanner}>DEMO — tidak ada uang berpindah</Text>
-          <Pressable style={[styles.button, busy && styles.buttonDisabled]} onPress={payNow} disabled={busy}>
-            <Text style={styles.buttonText}>Bayar Sekarang (SIMULASI)</Text>
+          <Pressable
+            style={[styles.button, busy && styles.buttonDisabled]}
+            onPress={payNow}
+            disabled={busy}
+            accessibilityRole="button">
+            <Text style={styles.buttonText}>Bayar Sekarang (coba-coba, uang tidak berpindah)</Text>
           </Pressable>
         </>
       )}
@@ -239,18 +247,57 @@ export default function OrderDetail() {
         <Pressable
           style={[styles.dangerButton, busy && styles.buttonDisabled]}
           onPress={cancelOrder}
-          disabled={busy}>
+          disabled={busy}
+          accessibilityRole="button">
           <Text style={styles.dangerButtonText}>Batalkan Pesanan</Text>
         </Pressable>
       )}
 
       <Pressable
         style={styles.chatButton}
+        accessibilityRole="button"
         onPress={() =>
           router.push({ pathname: '/(buyer)/order/[orderId]/chat', params: { orderId } })
         }>
         <Text style={styles.chatButtonText}>💬 Chat Penjual</Text>
       </Pressable>
+
+      {order.status === 'completed' && items && items.length > 0 && (
+        // PA-5: rebuild a cart from this order and jump straight to checkout.
+        <Pressable
+          style={styles.reorderButton}
+          accessibilityRole="button"
+          onPress={() => {
+            const results: MatchResult[] = items.map((it) =>
+              it.products && it.products.is_active
+                ? {
+                    kind: 'matched',
+                    item: { name: it.products.name, quantity: Number(it.quantity), unit: 'pcs' },
+                    product: it.products,
+                  }
+                : {
+                    kind: 'unmatched',
+                    item: {
+                      name: it.products?.name ?? 'barang lama',
+                      quantity: Number(it.quantity),
+                      unit: 'pcs',
+                    },
+                  }
+            );
+            setOrderDraft({
+              storeId: order.store_id,
+              transcript: 'Pesan ulang dari riwayat pesanan',
+              audioUri: null,
+              results,
+            });
+            router.push({
+              pathname: '/(buyer)/store/[id]/review',
+              params: { id: order.store_id },
+            });
+          }}>
+          <Text style={styles.reorderButtonText}>🔁 Pesan Lagi</Text>
+        </Pressable>
+      )}
 
       {order.status === 'completed' && reviewLoaded && (
         <>
@@ -268,7 +315,14 @@ export default function OrderDetail() {
               <Text style={styles.hintSmall}>Bagaimana pesananmu? Beri bintang:</Text>
               <View style={styles.starRow}>
                 {[1, 2, 3, 4, 5].map((n) => (
-                  <Pressable key={n} onPress={() => setRating(n)} hitSlop={6}>
+                  <Pressable
+                    key={n}
+                    onPress={() => setRating(n)}
+                    hitSlop={8}
+                    style={styles.starTap}
+                    accessibilityRole="button"
+                    accessibilityLabel={`Beri ${n} bintang`}
+                    accessibilityState={{ selected: n <= rating }}>
                     <Text style={[styles.star, n <= rating && styles.starActive]}>★</Text>
                   </Pressable>
                 ))}
@@ -276,6 +330,7 @@ export default function OrderDetail() {
               <TextInput
                 style={styles.commentInput}
                 placeholder="Tulis komentar (opsional)…"
+                placeholderTextColor={colors.secondary}
                 value={comment}
                 onChangeText={setComment}
                 multiline
@@ -283,7 +338,8 @@ export default function OrderDetail() {
               <Pressable
                 style={[styles.button, (rating < 1 || busy) && styles.buttonDisabled]}
                 onPress={sendReview}
-                disabled={rating < 1 || busy}>
+                disabled={rating < 1 || busy}
+                accessibilityRole="button">
                 <Text style={styles.buttonText}>Kirim Ulasan</Text>
               </Pressable>
             </View>
@@ -295,93 +351,114 @@ export default function OrderDetail() {
 }
 
 const styles = StyleSheet.create({
-  center: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-  container: { flexGrow: 1, padding: 24, paddingTop: 64, gap: 10 },
-  back: { color: '#16a34a', fontSize: 16, marginBottom: 4 },
-  title: { fontSize: 26, fontWeight: 'bold' },
+  center: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: colors.bg,
+  },
+  container: { ...scrollWrap, gap: 10 },
+  backWrap: { alignSelf: 'flex-start', paddingVertical: 12 },
+  back: { color: colors.primary, fontSize: 16, fontWeight: '600' },
+  title: { fontSize: 26, fontWeight: 'bold', color: colors.text },
   deadBanner: {
-    backgroundColor: '#fee2e2',
-    borderRadius: 10,
+    backgroundColor: colors.dangerBg,
+    borderRadius: radius.sm,
     padding: 14,
     borderWidth: 1,
-    borderColor: '#fecaca',
+    borderColor: colors.dangerBorder,
   },
-  deadBannerText: { color: '#b91c1c', fontWeight: '600', fontSize: 14 },
+  deadBannerText: { color: colors.dangerDark, fontWeight: '600', fontSize: 14 },
+  reorderButton: {
+    backgroundColor: colors.primarySoft,
+    borderWidth: 2,
+    borderColor: colors.primary,
+    borderRadius: radius.md,
+    padding: 14,
+    alignItems: 'center',
+  },
+  reorderButtonText: { color: colors.primaryDark, fontSize: 16, fontWeight: '600' },
+  stepSummary: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: colors.text,
+    marginTop: 4,
+    marginBottom: 2,
+  },
   timeline: { flexDirection: 'row', marginVertical: 8 },
   timelineStep: { flex: 1, alignItems: 'center', position: 'relative' },
   dot: {
-    width: 30,
-    height: 30,
-    borderRadius: 15,
-    backgroundColor: '#f3f4f6',
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: colors.neutralBg,
     borderWidth: 2,
-    borderColor: '#ddd',
+    borderColor: colors.border,
     justifyContent: 'center',
     alignItems: 'center',
     zIndex: 1,
   },
-  dotDone: { backgroundColor: '#dcfce7', borderColor: '#16a34a' },
-  dotCurrent: { backgroundColor: '#16a34a', borderColor: '#16a34a' },
-  dotText: { fontSize: 13, fontWeight: '700', color: '#999' },
-  dotTextActive: { color: '#fff' },
-  stepLabel: { fontSize: 11, color: '#777', marginTop: 4 },
-  stepLabelCurrent: { color: '#15803d', fontWeight: '700' },
+  dotDone: { backgroundColor: colors.primaryChipBg, borderColor: colors.primary },
+  dotCurrent: {
+    backgroundColor: colors.primaryBright,
+    borderColor: colors.sunny,
+    borderWidth: 3,
+  },
+  dotEmoji: { fontSize: 20 },
+  stepLabel: { fontSize: 11, color: colors.secondary, marginTop: 4 },
+  stepLabelActive: { color: colors.primaryDark, fontWeight: '700' },
   connector: {
     position: 'absolute',
-    top: 14,
+    top: 23,
     left: '50%',
     width: '100%',
-    height: 2,
-    backgroundColor: '#ddd',
+    height: 3,
+    backgroundColor: colors.border,
   },
-  connectorDone: { backgroundColor: '#16a34a' },
-  sectionTitle: { fontSize: 16, fontWeight: '600', marginTop: 10 },
+  connectorDone: { backgroundColor: colors.primary },
+  sectionTitle: { fontSize: 16, fontWeight: '600', marginTop: 10, color: colors.text },
   itemsCard: {
-    backgroundColor: '#fff',
-    borderRadius: 10,
+    backgroundColor: colors.card,
+    borderRadius: radius.sm,
     padding: 14,
     borderWidth: 1,
-    borderColor: '#eee',
+    borderColor: colors.border,
     gap: 10,
   },
   itemRow: { flexDirection: 'row', justifyContent: 'space-between', gap: 8 },
-  itemName: { fontSize: 14, fontWeight: '500', flex: 1 },
+  itemName: { fontSize: 14, fontWeight: '500', flex: 1, color: colors.text },
   itemPrices: { alignItems: 'flex-end' },
-  itemUnit: { fontSize: 12, color: '#777' },
-  itemTotal: { fontSize: 14, fontWeight: '600', color: '#15803d' },
-  address: { fontSize: 14, color: '#444', lineHeight: 20 },
+  itemUnit: { fontSize: 12, color: colors.secondary },
+  itemTotal: { fontSize: 14, fontWeight: '600', color: colors.primaryDark },
+  address: { fontSize: 14, color: colors.body, lineHeight: 20 },
   totals: { marginTop: 4, gap: 2 },
-  totalRow: { fontSize: 14, color: '#555', textAlign: 'right' },
-  grandTotal: { fontSize: 18, fontWeight: 'bold', textAlign: 'right' },
+  totalRow: { fontSize: 14, color: colors.body, textAlign: 'right' },
+  grandTotal: { fontSize: 18, fontWeight: 'bold', textAlign: 'right', color: colors.text },
   paymentRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    backgroundColor: '#fff',
-    borderRadius: 10,
+    backgroundColor: colors.card,
+    borderRadius: radius.sm,
     padding: 14,
     borderWidth: 1,
-    borderColor: '#eee',
+    borderColor: colors.border,
   },
-  paymentMethod: { fontSize: 14, fontWeight: '500' },
+  paymentMethod: { fontSize: 14, fontWeight: '500', color: colors.text, flex: 1 },
   payBadge: {
     fontSize: 12,
-    color: '#92400e',
-    backgroundColor: '#fef3c7',
     paddingHorizontal: 10,
     paddingVertical: 4,
-    borderRadius: 999,
+    borderRadius: radius.pill,
     overflow: 'hidden',
     fontWeight: '600',
   },
-  payBadgePaid: { color: '#15803d', backgroundColor: '#dcfce7' },
-  payBadgeVoided: { color: '#b91c1c', backgroundColor: '#fee2e2' },
   demoBanner: {
     alignSelf: 'flex-start',
     fontSize: 12,
     fontWeight: '700',
-    color: '#92400e',
-    backgroundColor: '#fef3c7',
+    color: colors.amberText,
+    backgroundColor: colors.amberBg,
     paddingHorizontal: 10,
     paddingVertical: 4,
     borderRadius: 6,
@@ -389,52 +466,54 @@ const styles = StyleSheet.create({
     marginTop: 6,
   },
   button: {
-    backgroundColor: '#16a34a',
-    borderRadius: 8,
+    backgroundColor: colors.primary,
+    borderRadius: radius.md,
     padding: 14,
     alignItems: 'center',
   },
-  buttonDisabled: { backgroundColor: '#a7cbb4' },
-  buttonText: { color: '#fff', fontSize: 16, fontWeight: '600' },
+  buttonDisabled: { backgroundColor: colors.disabled },
+  buttonText: { color: colors.white, fontSize: 16, fontWeight: '600' },
   dangerButton: {
     borderWidth: 2,
-    borderColor: '#dc2626',
-    borderRadius: 8,
+    borderColor: colors.danger,
+    borderRadius: radius.md,
     padding: 13,
     alignItems: 'center',
-    backgroundColor: '#fff',
+    backgroundColor: colors.card,
   },
-  dangerButtonText: { color: '#dc2626', fontSize: 15, fontWeight: '600' },
+  dangerButtonText: { color: colors.danger, fontSize: 15, fontWeight: '600' },
   chatButton: {
     borderWidth: 2,
-    borderColor: '#16a34a',
-    borderRadius: 8,
+    borderColor: colors.primary,
+    borderRadius: radius.md,
     padding: 13,
     alignItems: 'center',
-    backgroundColor: '#f0fdf4',
+    backgroundColor: colors.primarySoft,
   },
-  chatButtonText: { color: '#15803d', fontSize: 15, fontWeight: '600' },
+  chatButtonText: { color: colors.primaryDark, fontSize: 15, fontWeight: '600' },
   reviewCard: {
-    backgroundColor: '#fff',
-    borderRadius: 10,
+    backgroundColor: colors.card,
+    borderRadius: radius.sm,
     padding: 14,
     borderWidth: 1,
-    borderColor: '#eee',
+    borderColor: colors.border,
     gap: 10,
   },
-  reviewStars: { fontSize: 16, color: '#f59e0b', fontWeight: '600' },
-  reviewComment: { fontSize: 14, color: '#444', lineHeight: 20 },
-  hintSmall: { fontSize: 13, color: '#666' },
-  starRow: { flexDirection: 'row', gap: 8 },
-  star: { fontSize: 32, color: '#ddd' },
-  starActive: { color: '#f59e0b' },
+  reviewStars: { fontSize: 16, color: colors.amber, fontWeight: '600' },
+  reviewComment: { fontSize: 14, color: colors.body, lineHeight: 20 },
+  hintSmall: { fontSize: 13, color: colors.body },
+  starRow: { flexDirection: 'row', gap: 4 },
+  starTap: { padding: 6 },
+  star: { fontSize: 34, color: colors.border },
+  starActive: { color: colors.amber },
   commentInput: {
     borderWidth: 1,
-    borderColor: '#ccc',
-    borderRadius: 8,
+    borderColor: colors.inputBorder,
+    borderRadius: radius.md,
     padding: 10,
     fontSize: 14,
     minHeight: 60,
-    backgroundColor: '#fff',
+    backgroundColor: colors.card,
+    color: colors.text,
   },
 });

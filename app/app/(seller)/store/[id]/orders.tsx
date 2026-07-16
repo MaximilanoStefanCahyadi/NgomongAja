@@ -9,14 +9,12 @@ import {
   Text,
   View,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { formatRupiah } from '@/lib/format';
-import {
-  expireStaleOrders,
-  listStoreOrders,
-  type OrderRow,
-  type OrderStatus,
-} from '@/lib/orders';
+import { expireStaleOrders, listStoreOrders, type OrderRow } from '@/lib/orders';
+import { PAYMENT_BADGE, STATUS_CHIP } from '@/lib/status-ui';
+import { colors, radius, screenWrap } from '@/lib/theme';
 
 // Filter chips (PRD S-2). "Semua" shows everything, including rejected/cancelled.
 type FilterKey = 'all' | 'pending' | 'accepted' | 'ready' | 'completed';
@@ -29,21 +27,6 @@ const FILTERS: { key: FilterKey; label: string }[] = [
   { key: 'completed', label: 'Selesai' },
 ];
 
-const STATUS_CHIP: Record<OrderStatus, { label: string; bg: string; fg: string }> = {
-  pending: { label: 'Menunggu', bg: '#fef3c7', fg: '#92400e' },
-  accepted: { label: 'Diproses', bg: '#dbeafe', fg: '#1e40af' },
-  ready: { label: 'Siap', bg: '#ccfbf1', fg: '#115e59' },
-  completed: { label: 'Selesai', bg: '#dcfce7', fg: '#15803d' },
-  rejected: { label: 'Ditolak', bg: '#fee2e2', fg: '#b91c1c' },
-  cancelled: { label: 'Dibatalkan', bg: '#fee2e2', fg: '#b91c1c' },
-};
-
-const PAYMENT_BADGE: Record<string, { label: string; bg: string; fg: string }> = {
-  pending: { label: 'Belum dibayar', bg: '#fef3c7', fg: '#92400e' },
-  paid: { label: 'Lunas', bg: '#dcfce7', fg: '#15803d' },
-  voided: { label: 'Dibatalkan', bg: '#f3f4f6', fg: '#6b7280' },
-};
-
 function formatTime(iso: string): string {
   const d = new Date(iso);
   const date = d.toLocaleDateString('id-ID', { day: 'numeric', month: 'short' });
@@ -52,6 +35,7 @@ function formatTime(iso: string): string {
 }
 
 export default function StoreOrders() {
+  const insets = useSafeAreaInsets();
   const { id } = useLocalSearchParams<{ id: string }>();
   const [orders, setOrders] = useState<OrderRow[] | null>(null);
   const [filter, setFilter] = useState<FilterKey>('all');
@@ -72,25 +56,30 @@ export default function StoreOrders() {
   if (!visible) {
     return (
       <View style={styles.center}>
-        <ActivityIndicator size="large" />
+        <ActivityIndicator size="large" color={colors.primary} />
       </View>
     );
   }
 
   return (
-    <View style={styles.container}>
-      <Pressable onPress={() => router.back()}>
-        <Text style={styles.back}>‹ Kembali</Text>
+    <View style={[styles.container, { paddingTop: insets.top + 12 }]}>
+      <Pressable onPress={() => router.back()} hitSlop={12} style={styles.backWrap}>
+        <Text style={styles.back}>‹ Toko</Text>
       </Pressable>
-      <Text style={styles.title}>Pesanan Masuk</Text>
+      <Text style={styles.title}>Pesanan Masuk 📋</Text>
 
       <View>
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipRow}>
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.chipRow}>
           {FILTERS.map((f) => (
             <Pressable
               key={f.key}
               style={[styles.chip, filter === f.key && styles.chipActive]}
-              onPress={() => setFilter(f.key)}>
+              onPress={() => setFilter(f.key)}
+              accessibilityRole="button"
+              accessibilityState={{ selected: filter === f.key }}>
               <Text style={[styles.chipText, filter === f.key && styles.chipTextActive]}>
                 {f.label}
               </Text>
@@ -116,6 +105,7 @@ export default function StoreOrders() {
           return (
             <Pressable
               style={styles.card}
+              accessibilityRole="button"
               onPress={() =>
                 router.push({
                   pathname: '/(seller)/order/[orderId]',
@@ -153,38 +143,44 @@ export default function StoreOrders() {
 }
 
 const styles = StyleSheet.create({
-  center: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-  container: { flex: 1, padding: 24, paddingTop: 64 },
-  back: { color: '#16a34a', fontSize: 16, marginBottom: 8 },
-  title: { fontSize: 24, fontWeight: 'bold', marginBottom: 12 },
+  center: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: colors.bg,
+  },
+  container: { ...screenWrap },
+  backWrap: { alignSelf: 'flex-start', paddingVertical: 12 },
+  back: { color: colors.primary, fontSize: 16, fontWeight: '600' },
+  title: { fontSize: 24, fontWeight: 'bold', marginBottom: 12, color: colors.text },
   chipRow: { gap: 8 },
   chip: {
     paddingHorizontal: 14,
-    paddingVertical: 7,
-    borderRadius: 20,
-    backgroundColor: '#fff',
+    paddingVertical: 12,
+    borderRadius: radius.pill,
+    backgroundColor: colors.card,
     borderWidth: 1,
-    borderColor: '#ddd',
+    borderColor: colors.border,
   },
-  chipActive: { backgroundColor: '#16a34a', borderColor: '#16a34a' },
-  chipText: { fontSize: 14, color: '#444' },
-  chipTextActive: { color: '#fff', fontWeight: '600' },
-  empty: { color: '#666', textAlign: 'center', marginTop: 32, lineHeight: 20 },
+  chipActive: { backgroundColor: colors.primary, borderColor: colors.primary },
+  chipText: { fontSize: 14, color: colors.body },
+  chipTextActive: { color: colors.white, fontWeight: '600' },
+  empty: { color: colors.body, textAlign: 'center', marginTop: 32, lineHeight: 20 },
   card: {
-    backgroundColor: '#fff',
-    borderRadius: 8,
+    backgroundColor: colors.card,
+    borderRadius: radius.md,
     padding: 14,
     borderWidth: 1,
-    borderColor: '#eee',
+    borderColor: colors.border,
     gap: 8,
   },
   cardTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  buyerName: { fontSize: 15, fontWeight: '600', flex: 1, marginRight: 8 },
-  time: { fontSize: 12, color: '#888' },
+  buyerName: { fontSize: 15, fontWeight: '600', flex: 1, marginRight: 8, color: colors.text },
+  time: { fontSize: 12, color: colors.secondary },
   cardMid: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  total: { fontSize: 16, fontWeight: 'bold', color: '#15803d' },
-  fulfillment: { fontSize: 13, color: '#555' },
+  total: { fontSize: 16, fontWeight: 'bold', color: colors.primaryDark },
+  fulfillment: { fontSize: 13, color: colors.body },
   badgeRow: { flexDirection: 'row', gap: 6 },
-  badge: { borderRadius: 12, paddingHorizontal: 10, paddingVertical: 3 },
+  badge: { borderRadius: radius.md, paddingHorizontal: 10, paddingVertical: 3 },
   badgeText: { fontSize: 12, fontWeight: '600' },
 });

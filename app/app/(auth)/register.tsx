@@ -3,6 +3,8 @@ import { useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
+  KeyboardAvoidingView,
+  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -10,7 +12,9 @@ import {
   TextInput,
 } from 'react-native';
 
+import { friendlyError } from '@/lib/errors';
 import { supabase } from '@/lib/supabase';
+import { colors, radius, spacing } from '@/lib/theme';
 
 type Role = 'buyer' | 'seller';
 
@@ -45,7 +49,7 @@ export default function Register() {
     setSubmitting(false);
 
     if (error) {
-      Alert.alert('Gagal daftar', error.message);
+      Alert.alert('Gagal daftar', friendlyError(error));
       return;
     }
 
@@ -64,96 +68,126 @@ export default function Register() {
   };
 
   return (
-    <ScrollView contentContainerStyle={styles.container}>
-      <Text style={styles.title}>Daftar</Text>
+    <KeyboardAvoidingView
+      style={{ flex: 1, backgroundColor: colors.bg }}
+      behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+      <ScrollView
+        contentContainerStyle={styles.container}
+        keyboardShouldPersistTaps="handled">
+        <Text style={styles.title}>Daftar</Text>
 
-      <Text style={styles.label}>Saya mau daftar sebagai:</Text>
-      <Pressable
-        style={[styles.roleOption, role === 'buyer' && styles.roleSelected]}
-        onPress={() => setRole('buyer')}>
-        <Text style={styles.roleTitle}>Pembeli</Text>
-        <Text style={styles.roleDesc}>Belanja ke warung dekat rumah pakai suara</Text>
-      </Pressable>
-      <Pressable
-        style={[styles.roleOption, role === 'seller' && styles.roleSelected]}
-        onPress={() => setRole('seller')}>
-        <Text style={styles.roleTitle}>Penjual</Text>
-        <Text style={styles.roleDesc}>Kelola warung dan terima pesanan suara</Text>
-      </Pressable>
+        <Text style={styles.label}>Saya mau daftar sebagai:</Text>
+        <Pressable
+          style={[styles.roleOption, role === 'buyer' && styles.roleSelected]}
+          onPress={() => setRole('buyer')}
+          accessibilityRole="button"
+          accessibilityState={{ selected: role === 'buyer' }}>
+          <Text style={styles.roleTitle}>Pembeli</Text>
+          <Text style={styles.roleDesc}>Belanja ke warung dekat rumah pakai suara</Text>
+        </Pressable>
+        <Pressable
+          style={[styles.roleOption, role === 'seller' && styles.roleSelected]}
+          onPress={() => setRole('seller')}
+          accessibilityRole="button"
+          accessibilityState={{ selected: role === 'seller' }}>
+          <Text style={styles.roleTitle}>Penjual</Text>
+          <Text style={styles.roleDesc}>Kelola warung dan terima pesanan suara</Text>
+        </Pressable>
 
-      <TextInput
-        style={styles.input}
-        placeholder="Nama lengkap"
-        value={fullName}
-        onChangeText={setFullName}
-      />
-      <TextInput
-        style={styles.input}
-        placeholder="Nomor HP (contoh: 08123456789)"
-        keyboardType="phone-pad"
-        value={phone}
-        onChangeText={setPhone}
-      />
-      <TextInput
-        style={styles.input}
-        placeholder="Email"
-        autoCapitalize="none"
-        keyboardType="email-address"
-        value={email}
-        onChangeText={setEmail}
-      />
-      <TextInput
-        style={styles.input}
-        placeholder="Kata sandi (min. 8 karakter)"
-        secureTextEntry
-        value={password}
-        onChangeText={setPassword}
-      />
+        <Text style={styles.label}>Nama lengkap</Text>
+        <TextInput
+          style={styles.input}
+          placeholder="Nama lengkap"
+          value={fullName}
+          onChangeText={setFullName}
+        />
+        <Text style={styles.label}>Nomor HP</Text>
+        <TextInput
+          style={styles.input}
+          placeholder="Contoh: 08123456789"
+          keyboardType="phone-pad"
+          value={phone}
+          onChangeText={setPhone}
+        />
+        <Text style={styles.label}>Email</Text>
+        <TextInput
+          style={styles.input}
+          placeholder="Email"
+          autoCapitalize="none"
+          keyboardType="email-address"
+          value={email}
+          onChangeText={setEmail}
+        />
+        <Text style={styles.label}>Kata sandi</Text>
+        <TextInput
+          style={styles.input}
+          placeholder="Minimal 8 karakter"
+          secureTextEntry
+          value={password}
+          onChangeText={setPassword}
+        />
 
-      <Pressable style={styles.button} onPress={handleRegister} disabled={submitting}>
-        {submitting ? (
-          <ActivityIndicator color="#fff" />
-        ) : (
-          <Text style={styles.buttonText}>Daftar</Text>
-        )}
-      </Pressable>
+        <Pressable style={styles.button} onPress={handleRegister} disabled={submitting}>
+          {submitting ? (
+            <ActivityIndicator color="#fff" />
+          ) : (
+            <Text style={styles.buttonText}>Daftar</Text>
+          )}
+        </Pressable>
 
-      <Link href="/(auth)/login" style={styles.link}>
-        Sudah punya akun? Masuk
-      </Link>
-    </ScrollView>
+        <Link href="/(auth)/login" asChild>
+          <Pressable hitSlop={12} style={styles.linkWrap} accessibilityRole="link">
+            <Text style={styles.link}>Sudah punya akun? Masuk</Text>
+          </Pressable>
+        </Link>
+      </ScrollView>
+    </KeyboardAvoidingView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flexGrow: 1, justifyContent: 'center', padding: 24, gap: 12 },
-  title: { fontSize: 28, fontWeight: 'bold', textAlign: 'center', marginBottom: 8 },
-  label: { fontSize: 14, color: '#444' },
+  container: {
+    flexGrow: 1,
+    justifyContent: 'center',
+    padding: spacing.xl,
+    gap: spacing.sm,
+    backgroundColor: colors.bg,
+  },
+  title: {
+    fontSize: 28,
+    fontWeight: 'bold',
+    textAlign: 'center',
+    marginBottom: spacing.sm,
+    color: colors.text,
+  },
+  label: { fontSize: 13, fontWeight: '700', color: colors.body, marginTop: spacing.xs },
   roleOption: {
     borderWidth: 2,
-    borderColor: '#ddd',
-    borderRadius: 8,
+    borderColor: colors.border,
+    borderRadius: radius.md,
     padding: 12,
-    backgroundColor: '#fff',
+    backgroundColor: colors.card,
   },
-  roleSelected: { borderColor: '#16a34a', backgroundColor: '#f0fdf4' },
-  roleTitle: { fontSize: 16, fontWeight: '600' },
-  roleDesc: { fontSize: 13, color: '#666', marginTop: 2 },
+  roleSelected: { borderColor: colors.primary, backgroundColor: colors.primarySoft },
+  roleTitle: { fontSize: 16, fontWeight: '600', color: colors.text },
+  roleDesc: { fontSize: 13, color: colors.body, marginTop: 2 },
   input: {
     borderWidth: 1,
-    borderColor: '#ccc',
-    borderRadius: 8,
+    borderColor: colors.inputBorder,
+    borderRadius: radius.md,
     padding: 12,
     fontSize: 16,
-    backgroundColor: '#fff',
+    backgroundColor: colors.card,
+    color: colors.text,
   },
   button: {
-    backgroundColor: '#16a34a',
-    borderRadius: 8,
+    backgroundColor: colors.primary,
+    borderRadius: radius.md,
     padding: 14,
     alignItems: 'center',
-    marginTop: 8,
+    marginTop: spacing.sm,
   },
-  buttonText: { color: '#fff', fontSize: 16, fontWeight: '600' },
-  link: { textAlign: 'center', color: '#16a34a', marginTop: 16, fontSize: 14 },
+  buttonText: { color: colors.white, fontSize: 16, fontWeight: '600' },
+  linkWrap: { alignSelf: 'center', paddingVertical: 12, marginTop: spacing.xs },
+  link: { textAlign: 'center', color: colors.primary, fontSize: 14, fontWeight: '600' },
 });
