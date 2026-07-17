@@ -17,7 +17,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { listAddresses, type Address } from '@/lib/addresses';
 import { useAuth } from '@/lib/auth-context';
 import { friendlyError } from '@/lib/errors';
-import { colors, radius, scrollWrap, spacing } from '@/lib/theme';
+import { colors, fonts, radius, scrollWrap, spacing } from '@/lib/theme';
 import { getMyVerification, submitVerification, type Verification } from '@/lib/verification';
 
 // "2026-07-15T…" -> "15 Jul 2026"
@@ -245,7 +245,7 @@ const styles = StyleSheet.create({
   container: { ...scrollWrap, gap: 10 },
   backWrap: { alignSelf: 'flex-start', paddingVertical: 12 },
   back: { color: colors.primary, fontSize: 16, fontWeight: '600' },
-  title: { fontSize: 28, fontWeight: 'bold', color: colors.text },
+  title: { fontSize: 28, fontFamily: fonts.heading, color: colors.text },
   card: {
     backgroundColor: colors.card,
     borderRadius: radius.lg,
@@ -254,12 +254,12 @@ const styles = StyleSheet.create({
     borderColor: colors.border,
     gap: spacing.sm,
   },
-  name: { fontSize: 18, fontWeight: '600', color: colors.text },
+  name: { fontSize: 18, fontFamily: fonts.bodySemi, color: colors.text },
   meta: { fontSize: 14, color: colors.body },
   roleBadge: {
     alignSelf: 'flex-start',
     fontSize: 12,
-    fontWeight: '600',
+    fontFamily: fonts.bodySemi,
     color: colors.primaryDark,
     backgroundColor: colors.primaryChipBg,
     paddingHorizontal: 10,
@@ -267,7 +267,7 @@ const styles = StyleSheet.create({
     borderRadius: radius.pill,
     overflow: 'hidden',
   },
-  sectionTitle: { fontSize: 16, fontWeight: '600', marginTop: 10, color: colors.text },
+  sectionTitle: { fontSize: 16, fontFamily: fonts.bodySemi, marginTop: 10, color: colors.text },
   achievementChip: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -284,7 +284,7 @@ const styles = StyleSheet.create({
     elevation: 3,
   },
   achievementEmoji: { fontSize: 28 },
-  achievementTitle: { color: colors.primaryDark, fontWeight: '800', fontSize: 16 },
+  achievementTitle: { color: colors.primaryDark, fontFamily: fonts.heading, fontSize: 16 },
   achievementDesc: { color: colors.primaryDark, fontSize: 13, marginTop: 1 },
   achievementSpark: { fontSize: 18 },
   pendingBox: {
@@ -303,7 +303,7 @@ const styles = StyleSheet.create({
     borderColor: colors.dangerBorder,
     gap: spacing.sm,
   },
-  rejectedTitle: { color: colors.dangerDark, fontWeight: '700', fontSize: 15 },
+  rejectedTitle: { color: colors.dangerDark, fontFamily: fonts.bodyBold, fontSize: 15 },
   rejectedReason: { color: colors.dangerDark, fontSize: 14, lineHeight: 20 },
   privacy: {
     fontSize: 13,
@@ -314,7 +314,7 @@ const styles = StyleSheet.create({
     lineHeight: 19,
     overflow: 'hidden',
   },
-  label: { fontSize: 13, fontWeight: '700', color: colors.body, marginTop: spacing.xs },
+  label: { fontSize: 13, fontFamily: fonts.bodyBold, color: colors.body, marginTop: spacing.xs },
   input: {
     borderWidth: 1,
     borderColor: colors.inputBorder,
@@ -348,7 +348,7 @@ const styles = StyleSheet.create({
     marginTop: spacing.xs,
   },
   buttonDisabled: { backgroundColor: colors.disabled },
-  buttonText: { color: colors.white, fontSize: 16, fontWeight: '600' },
+  buttonText: { color: colors.onPrimary, fontSize: 16, fontWeight: '600' },
   empty: { color: colors.body, fontSize: 14 },
   addressCard: {
     backgroundColor: colors.card,
@@ -358,7 +358,7 @@ const styles = StyleSheet.create({
     borderColor: colors.border,
     gap: 2,
   },
-  addressLabel: { fontSize: 13, fontWeight: '700', color: colors.primaryDark },
+  addressLabel: { fontSize: 13, fontFamily: fonts.bodyBold, color: colors.primaryDark },
   addressText: { fontSize: 14, color: colors.body, lineHeight: 20 },
   signOutWrap: { alignSelf: 'center', paddingVertical: 12, marginTop: spacing.sm },
   signOut: { textAlign: 'center', color: colors.danger, fontSize: 14, fontWeight: '600' },

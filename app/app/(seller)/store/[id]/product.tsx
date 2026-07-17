@@ -17,7 +17,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { friendlyError } from '@/lib/errors';
 import { createProduct, listProducts, updateProduct } from '@/lib/products';
-import { colors, radius, scrollWrap } from '@/lib/theme';
+import { colors, fonts, radius, scrollWrap } from '@/lib/theme';
 
 export default function ProductForm() {
   const insets = useSafeAreaInsets();
@@ -188,7 +188,7 @@ const styles = StyleSheet.create({
   container: { ...scrollWrap, gap: 12 },
   backWrap: { alignSelf: 'flex-start', paddingVertical: 12 },
   back: { color: colors.primary, fontSize: 16, fontWeight: '600' },
-  title: { fontSize: 28, fontWeight: 'bold', color: colors.text },
+  title: { fontSize: 28, fontFamily: fonts.heading, color: colors.text },
   achievement: {
     backgroundColor: colors.amberSoft,
     borderWidth: 1,
@@ -199,7 +199,7 @@ const styles = StyleSheet.create({
     alignSelf: 'flex-start',
   },
   achievementText: { color: '#854d0e', fontSize: 14, fontWeight: '700' },
-  label: { fontSize: 13, fontWeight: '700', color: colors.body, marginTop: 4 },
+  label: { fontSize: 13, fontFamily: fonts.bodyBold, color: colors.body, marginTop: 4 },
   input: {
     borderWidth: 1,
     borderColor: colors.inputBorder,
@@ -228,7 +228,7 @@ const styles = StyleSheet.create({
     borderColor: colors.primary,
   },
   secondaryButtonText: { color: colors.primaryDark, fontSize: 16, fontWeight: '600' },
-  buttonText: { color: colors.white, fontSize: 16, fontWeight: '600' },
+  buttonText: { color: colors.onPrimary, fontSize: 16, fontWeight: '600' },
   cancelWrap: { alignSelf: 'center', paddingVertical: 12, marginTop: 4 },
   cancel: { textAlign: 'center', color: colors.body, fontSize: 14 },
 });

@@ -1,3 +1,4 @@
+import { Feather } from '@expo/vector-icons';
 import {
   AudioModule,
   RecordingPresets,
@@ -24,10 +25,10 @@ import { parseTranscript } from '@/lib/nlp';
 import { setOrderDraft } from '@/lib/order-draft';
 import { listActiveProducts } from '@/lib/products';
 import { transcribeAudio } from '@/lib/stt';
-import { colors, radius, screenWrap, spacing } from '@/lib/theme';
+import { colors, fonts, radius, screenWrap } from '@/lib/theme';
 
 const MAX_RECORDING_SECONDS = 60;
-const WARN_AT_SECONDS = 50; // last 10 seconds: red timer + countdown hint
+const WARN_AT_SECONDS = 50; // last 10 seconds: countdown hint
 
 type Phase = 'idle' | 'recording' | 'processing' | 'done' | 'error';
 
@@ -45,8 +46,9 @@ export default function VoiceOrder() {
   // re-speak their whole list (PRD B-2).
   const audioUriRef = useRef<string | null>(null);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  // Gentle pulse on the stop button while recording ("I'm listening").
+  // Soft pulse ring behind the mic circle while recording ("I'm listening").
   const pulse = useRef(new Animated.Value(1)).current;
+  const pulseOpacity = useRef(new Animated.Value(0.4)).current;
 
   useEffect(() => {
     return () => {
@@ -57,17 +59,18 @@ export default function VoiceOrder() {
   useEffect(() => {
     if (phase !== 'recording') return;
     const loop = Animated.loop(
-      Animated.sequence([
-        Animated.timing(pulse, { toValue: 1.08, duration: 600, useNativeDriver: true }),
-        Animated.timing(pulse, { toValue: 1, duration: 600, useNativeDriver: true }),
+      Animated.parallel([
+        Animated.timing(pulse, { toValue: 1.55, duration: 1400, useNativeDriver: true }),
+        Animated.timing(pulseOpacity, { toValue: 0, duration: 1400, useNativeDriver: true }),
       ])
     );
     loop.start();
     return () => {
       loop.stop();
       pulse.setValue(1);
+      pulseOpacity.setValue(0.4);
     };
-  }, [phase, pulse]);
+  }, [phase, pulse, pulseOpacity]);
 
   const startRecording = async () => {
     const permission = await AudioModule.requestRecordingPermissionsAsync();
@@ -154,151 +157,186 @@ export default function VoiceOrder() {
   };
 
   const nearLimit = seconds >= WARN_AT_SECONDS;
+  const onGreen = phase !== 'done';
 
+  // ─── Result screen (paper background) ───
+  if (phase === 'done' && results) {
+    return (
+      <View style={[styles.paperContainer, { paddingTop: insets.top + 12 }]}>
+        <Pressable onPress={goBack} hitSlop={12} style={styles.backWrap}>
+          <Feather name="chevron-left" size={18} color={colors.primaryDark} />
+          <Text style={styles.backPaper}>Kembali</Text>
+        </Pressable>
+        <Text style={styles.resultTitle}>Yang kami dengar</Text>
+
+        <View style={styles.transcriptBubble}>
+          <Feather name="mic" size={20} color={colors.primaryDark} style={{ marginTop: 2 }} />
+          <Text style={styles.transcriptText}>"{transcript}"</Text>
+        </View>
+
+        <Text style={styles.sectionLabel}>
+          {results.length} barang dikenali
+        </Text>
+        <FlatList
+          data={results}
+          keyExtractor={(_, i) => String(i)}
+          contentContainerStyle={{ gap: 10, paddingVertical: 12 }}
+          ListEmptyComponent={
+            <Text style={styles.hintPaper}>
+              Kami tidak menangkap pesanan apa pun. Coba rekam ulang ya.
+            </Text>
+          }
+          renderItem={({ item: r }) => {
+            if (r.kind === 'matched') {
+              return (
+                <View style={styles.resultCard}>
+                  <View style={[styles.resultIcon, { backgroundColor: colors.primaryChipBg }]}>
+                    <Feather name="check" size={17} color={colors.primaryDeep} />
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.resultName}>
+                      {r.product.name} × {String(r.item.quantity).replace('.', ',')}
+                    </Text>
+                    <Text style={styles.resultPrice}>
+                      {formatRupiah(Math.round(r.product.price * r.item.quantity))}
+                    </Text>
+                  </View>
+                </View>
+              );
+            }
+            const ambiguous = r.kind === 'ambiguous';
+            return (
+              <View style={[styles.resultCard, styles.resultCardWarn]}>
+                <View style={[styles.resultIcon, { backgroundColor: colors.amberBorder }]}>
+                  <Feather
+                    name={ambiguous ? 'help-circle' : 'search'}
+                    size={17}
+                    color={colors.sunnyText}
+                  />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.resultName}>
+                    "{r.item.name}" × {String(r.item.quantity).replace('.', ',')}
+                  </Text>
+                  <Text style={styles.resultWarnMeta}>
+                    {ambiguous
+                      ? `${r.candidates.length} barang mirip — pilih di langkah berikutnya`
+                      : 'Tidak ketemu — bisa dicari manual di langkah berikutnya'}
+                  </Text>
+                </View>
+              </View>
+            );
+          }}
+        />
+
+        <Pressable
+          style={({ pressed }) => [styles.primaryBtn, pressed && styles.primaryBtnPressed]}
+          accessibilityRole="button"
+          onPress={() => {
+            if (!storeId) return;
+            setOrderDraft({
+              storeId,
+              transcript,
+              audioUri: audioUriRef.current,
+              results,
+            });
+            router.push({
+              pathname: '/(buyer)/store/[id]/review',
+              params: { id: storeId },
+            });
+          }}>
+          <Text style={styles.primaryBtnText}>Lanjut Periksa Pesanan</Text>
+        </Pressable>
+        <Pressable onPress={reset} hitSlop={12} style={styles.ghostWrap}>
+          <Text style={styles.ghostPaper}>Rekam ulang</Text>
+        </Pressable>
+      </View>
+    );
+  }
+
+  // ─── Green screens: idle / recording / processing / error ───
   return (
-    <View style={[styles.container, { paddingTop: insets.top + 12 }]}>
+    <View style={[styles.greenContainer, { paddingTop: insets.top + 16 }]}>
       <Pressable onPress={goBack} hitSlop={12} style={styles.backWrap}>
-        <Text style={styles.back}>‹ Toko</Text>
+        <Feather name="chevron-left" size={18} color="#eef2e4" />
+        <Text style={styles.backGreen}>Kembali</Text>
       </Pressable>
-      <Text style={styles.title}>Ngomong Aja 🎤</Text>
 
       {phase === 'idle' && (
-        <View style={styles.center}>
-          <Text style={styles.hint}>
-            Sebutkan pesananmu seperti bicara ke penjual, contohnya:{'\n'}
-            "mau pesen minyak goreng dua liter sama telur setengah kilo"
-          </Text>
-          <Pressable
-            style={styles.recordButton}
-            onPress={startRecording}
-            accessibilityRole="button"
-            accessibilityLabel="Mulai bicara">
-            <Text style={styles.recordButtonText}>🎤{'\n'}Mulai Bicara</Text>
-          </Pressable>
-        </View>
+        <>
+          <View style={styles.greenCenterTop}>
+            <Text style={styles.greenTitle}>Ngomong Aja</Text>
+            <Text style={styles.greenHint}>
+              Sebutkan pesananmu seperti bicara ke penjual, contohnya:{'\n'}"mau pesen minyak
+              goreng dua liter sama telur setengah kilo"
+            </Text>
+          </View>
+          <View style={styles.micArea}>
+            <Pressable
+              style={styles.micCircle}
+              onPress={startRecording}
+              accessibilityRole="button"
+              accessibilityLabel="Mulai bicara">
+              <Feather name="mic" size={50} color={colors.primaryDark} />
+            </Pressable>
+          </View>
+          <Text style={styles.greenHintSmall}>Ketuk mikrofon untuk mulai bicara</Text>
+          <View style={{ height: 58 }} />
+        </>
       )}
 
       {phase === 'recording' && (
-        <View style={styles.center}>
-          <Text style={[styles.timer, nearLimit && styles.timerWarn]}>
-            {String(Math.floor(seconds / 60)).padStart(1, '0')}:
-            {String(seconds % 60).padStart(2, '0')} / 1:00
-          </Text>
-          {nearLimit ? (
-            <Text style={styles.timeLeftWarn}>
-              ⏰ {MAX_RECORDING_SECONDS - seconds} detik lagi…
+        <>
+          <View style={styles.greenCenterTop}>
+            <Text style={styles.timer}>
+              {String(Math.floor(seconds / 60))}:{String(seconds % 60).padStart(2, '0')}
             </Text>
-          ) : (
-            <Text style={styles.hint}>Sedang merekam… bicara yang jelas ya.</Text>
-          )}
-          <Animated.View style={{ transform: [{ scale: pulse }] }}>
-            <Pressable
-              style={[styles.recordButton, styles.stopButton]}
-              onPress={stopRecording}
-              accessibilityRole="button"
-              accessibilityLabel="Selesai merekam">
-              <Text style={styles.recordButtonText}>⏹{'\n'}Selesai</Text>
-            </Pressable>
-          </Animated.View>
-        </View>
+            <Text style={styles.greenHint}>
+              {nearLimit
+                ? `${MAX_RECORDING_SECONDS - seconds} detik lagi…`
+                : 'Sedang mendengarkan… bicara aja'}
+            </Text>
+          </View>
+          <View style={styles.micArea}>
+            <Animated.View
+              style={[
+                styles.pulseRing,
+                { opacity: pulseOpacity, transform: [{ scale: pulse }] },
+              ]}
+            />
+            <View style={styles.micCircle}>
+              <Feather name="mic" size={50} color={colors.primaryDark} />
+            </View>
+          </View>
+          <Pressable
+            style={({ pressed }) => [styles.stopBtn, pressed && { opacity: 0.85 }]}
+            onPress={stopRecording}
+            accessibilityRole="button"
+            accessibilityLabel="Selesai merekam">
+            <Feather name="square" size={17} color={colors.primaryDeep} />
+            <Text style={styles.stopBtnText}>Selesai Bicara</Text>
+          </Pressable>
+        </>
       )}
 
       {phase === 'processing' && (
-        <View style={styles.center}>
-          <ActivityIndicator size="large" color={colors.primary} />
-          <Text style={styles.hint}>{processingStep}</Text>
+        <View style={styles.greenCenterFill}>
+          <ActivityIndicator size="large" color={colors.onPrimary} />
+          <Text style={styles.greenHint}>{processingStep}</Text>
         </View>
       )}
 
       {phase === 'error' && (
-        <View style={styles.center}>
-          <Text style={styles.hint}>
-            Ada gangguan saat memproses. Rekamanmu masih tersimpan — tidak perlu
-            mengulang bicara.
+        <View style={styles.greenCenterFill}>
+          <Text style={styles.greenHint}>
+            Ada gangguan saat memproses. Rekamanmu masih tersimpan — tidak perlu mengulang
+            bicara.
           </Text>
-          <Pressable style={styles.button} onPress={processAudio}>
-            <Text style={styles.buttonText}>Coba Lagi</Text>
+          <Pressable style={styles.stopBtn} onPress={processAudio} accessibilityRole="button">
+            <Text style={styles.stopBtnText}>Coba Lagi</Text>
           </Pressable>
-          <Pressable onPress={reset} hitSlop={12} style={styles.linkWrap}>
-            <Text style={styles.linkText}>Rekam ulang dari awal</Text>
-          </Pressable>
-        </View>
-      )}
-
-      {phase === 'done' && results && (
-        <View style={{ flex: 1 }}>
-          <Text style={styles.transcriptLabel}>Yang kami dengar:</Text>
-          <Text style={styles.transcript}>"{transcript}"</Text>
-
-          <FlatList
-            data={results}
-            keyExtractor={(_, i) => String(i)}
-            contentContainerStyle={{ gap: 8, paddingVertical: 12 }}
-            ListEmptyComponent={
-              <Text style={styles.hint}>
-                Kami tidak menangkap pesanan apa pun. Coba rekam ulang ya.
-              </Text>
-            }
-            renderItem={({ item: r }) => (
-              <View style={styles.resultRow}>
-                {r.kind === 'matched' && (
-                  <>
-                    <Text style={styles.resultIcon}>✅</Text>
-                    <View style={{ flex: 1 }}>
-                      <Text style={styles.resultName}>
-                        {r.product.name} × {r.item.quantity}
-                      </Text>
-                      <Text style={styles.resultMeta}>{formatRupiah(r.product.price)}</Text>
-                    </View>
-                  </>
-                )}
-                {r.kind === 'ambiguous' && (
-                  <>
-                    <Text style={styles.resultIcon}>🤔</Text>
-                    <View style={{ flex: 1 }}>
-                      <Text style={styles.resultName}>
-                        "{r.item.name}" × {r.item.quantity}
-                      </Text>
-                      <Text style={styles.resultMeta}>
-                        {r.candidates.length} barang mirip — pilih di langkah berikutnya
-                      </Text>
-                    </View>
-                  </>
-                )}
-                {r.kind === 'unmatched' && (
-                  <>
-                    <Text style={styles.resultIcon}>❓</Text>
-                    <View style={{ flex: 1 }}>
-                      <Text style={styles.resultName}>"{r.item.name}"</Text>
-                      <Text style={styles.resultMeta}>
-                        Tidak ketemu — bisa dicari manual di langkah berikutnya
-                      </Text>
-                    </View>
-                  </>
-                )}
-              </View>
-            )}
-          />
-
-          <Pressable
-            style={styles.button}
-            onPress={() => {
-              if (!storeId) return;
-              setOrderDraft({
-                storeId,
-                transcript,
-                audioUri: audioUriRef.current,
-                results,
-              });
-              router.push({
-                pathname: '/(buyer)/store/[id]/review',
-                params: { id: storeId },
-              });
-            }}>
-            <Text style={styles.buttonText}>Lanjut Periksa Pesanan</Text>
-          </Pressable>
-          <Pressable onPress={reset} hitSlop={12} style={styles.linkWrap}>
-            <Text style={styles.linkText}>Rekam ulang</Text>
+          <Pressable onPress={reset} hitSlop={12} style={styles.ghostWrap}>
+            <Text style={styles.ghostGreen}>Rekam ulang dari awal</Text>
           </Pressable>
         </View>
       )}
@@ -307,57 +345,153 @@ export default function VoiceOrder() {
 }
 
 const styles = StyleSheet.create({
-  container: { ...screenWrap },
-  backWrap: { alignSelf: 'flex-start', paddingVertical: 12 },
-  back: { color: colors.primary, fontSize: 16, fontWeight: '600' },
-  title: { fontSize: 28, fontWeight: 'bold', marginBottom: spacing.sm, color: colors.text },
-  center: { flex: 1, justifyContent: 'center', alignItems: 'center', gap: 20 },
-  hint: { fontSize: 15, color: colors.body, textAlign: 'center', lineHeight: 22 },
-  timer: {
-    fontSize: 40,
-    fontWeight: 'bold',
-    fontVariant: ['tabular-nums'],
-    color: colors.text,
-  },
-  timerWarn: { color: colors.danger },
-  timeLeftWarn: { fontSize: 16, fontWeight: '700', color: colors.danger },
-  recordButton: {
-    width: 140,
-    height: 140,
-    borderRadius: 70,
+  // green stage
+  greenContainer: {
+    flex: 1,
     backgroundColor: colors.primary,
-    justifyContent: 'center',
-    alignItems: 'center',
+    padding: 28,
   },
-  stopButton: { backgroundColor: colors.danger },
-  recordButtonText: {
-    color: colors.white,
-    fontSize: 18,
-    fontWeight: 'bold',
-    textAlign: 'center',
-  },
-  transcriptLabel: { fontSize: 13, color: colors.secondary },
-  transcript: { fontSize: 15, fontStyle: 'italic', marginTop: 4, color: colors.text },
-  resultRow: {
+  backWrap: {
+    alignSelf: 'flex-start',
+    paddingVertical: 12,
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: colors.card,
-    borderRadius: radius.md,
-    padding: 14,
-    borderWidth: 1,
-    borderColor: colors.border,
-    gap: 12,
+    gap: 4,
   },
-  resultIcon: { fontSize: 20 },
-  resultName: { fontSize: 15, fontWeight: '500', color: colors.text },
-  resultMeta: { fontSize: 13, color: colors.body, marginTop: 2 },
-  button: {
-    backgroundColor: colors.primary,
-    borderRadius: radius.md,
+  backGreen: { color: '#eef2e4', fontSize: 15, fontFamily: fonts.bodySemi },
+  backPaper: { color: colors.primaryDark, fontSize: 15, fontFamily: fonts.bodySemi },
+  greenCenterTop: { alignItems: 'center', marginTop: 20, gap: 10 },
+  greenCenterFill: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 22 },
+  greenTitle: { fontFamily: fonts.heading, fontSize: 34, color: colors.onPrimary },
+  timer: {
+    fontFamily: fonts.heading,
+    fontSize: 52,
+    color: colors.onPrimary,
+    fontVariant: ['tabular-nums'],
+  },
+  greenHint: {
+    fontFamily: fonts.body,
+    fontSize: 15,
+    color: '#eef2e4',
+    textAlign: 'center',
+    lineHeight: 23,
+    maxWidth: 300,
+  },
+  greenHintSmall: {
+    fontFamily: fonts.body,
+    fontSize: 14,
+    color: '#eef2e4',
+    textAlign: 'center',
+  },
+  micArea: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  pulseRing: {
+    position: 'absolute',
+    width: 148,
+    height: 148,
+    borderRadius: radius.pill,
+    backgroundColor: colors.bg,
+  },
+  micCircle: {
+    width: 148,
+    height: 148,
+    borderRadius: radius.pill,
+    backgroundColor: colors.bg,
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#03210f',
+    shadowOpacity: 0.3,
+    shadowRadius: 16,
+    shadowOffset: { width: 0, height: 6 },
+    elevation: 8,
+  },
+  stopBtn: {
+    backgroundColor: colors.bg,
+    borderRadius: radius.pill,
+    padding: 17,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 10,
+  },
+  stopBtnText: { color: colors.primaryDeep, fontSize: 19, fontFamily: fonts.heading },
+  ghostWrap: { alignSelf: 'center', paddingVertical: 12 },
+  ghostGreen: { fontFamily: fonts.bodySemi, color: '#eef2e4', fontSize: 14 },
+  ghostPaper: { fontFamily: fonts.bodySemi, color: colors.secondary, fontSize: 14 },
+
+  // paper result stage
+  paperContainer: { ...screenWrap },
+  resultTitle: { fontFamily: fonts.heading, fontSize: 28, color: colors.text, marginTop: 6 },
+  transcriptBubble: {
+    flexDirection: 'row',
+    gap: 12,
+    backgroundColor: colors.primaryChipBg,
+    borderRadius: radius.lg,
+    padding: 16,
+    marginTop: 14,
+  },
+  transcriptText: {
+    flex: 1,
+    fontFamily: fonts.body,
+    fontStyle: 'italic',
+    fontSize: 14.5,
+    lineHeight: 22,
+    color: '#032b13',
+  },
+  sectionLabel: {
+    fontFamily: fonts.bodySemi,
+    fontSize: 12.5,
+    letterSpacing: 1,
+    textTransform: 'uppercase',
+    color: colors.secondary,
+    marginTop: 22,
+  },
+  hintPaper: {
+    fontFamily: fonts.body,
+    fontSize: 15,
+    color: colors.body,
+    textAlign: 'center',
+    lineHeight: 22,
+    marginTop: 20,
+  },
+  resultCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 13,
+    backgroundColor: colors.card,
+    borderRadius: radius.lg,
     padding: 14,
+  },
+  resultCardWarn: { backgroundColor: colors.amberBg },
+  resultIcon: {
+    width: 34,
+    height: 34,
+    borderRadius: radius.pill,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  resultName: { fontFamily: fonts.bodySemi, fontSize: 15, color: colors.text },
+  resultPrice: {
+    fontFamily: fonts.bodyBold,
+    fontSize: 13,
+    color: colors.primaryDark,
+    marginTop: 2,
+  },
+  resultWarnMeta: {
+    fontFamily: fonts.body,
+    fontSize: 12.5,
+    color: colors.sunnyText,
+    marginTop: 2,
+  },
+  primaryBtn: {
+    backgroundColor: colors.primary,
+    borderRadius: radius.pill,
+    padding: 16,
     alignItems: 'center',
   },
-  buttonText: { color: colors.white, fontSize: 16, fontWeight: '600' },
-  linkWrap: { alignSelf: 'center', paddingVertical: 12 },
-  linkText: { textAlign: 'center', color: colors.body, fontSize: 14 },
+  primaryBtnPressed: { backgroundColor: colors.primaryDark },
+  primaryBtnText: { color: colors.onPrimary, fontSize: 17, fontFamily: fonts.heading },
 });

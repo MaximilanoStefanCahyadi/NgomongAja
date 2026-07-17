@@ -4,7 +4,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { OrderChat } from '@/components/order-chat';
 import { useAuth } from '@/lib/auth-context';
-import { colors } from '@/lib/theme';
+import { colors, fonts } from '@/lib/theme';
 
 export default function BuyerOrderChat() {
   const insets = useSafeAreaInsets();
@@ -50,5 +50,5 @@ const styles = StyleSheet.create({
   },
   backWrap: { alignSelf: 'flex-start', paddingVertical: 6 },
   back: { color: colors.primary, fontSize: 16, fontWeight: '600' },
-  title: { fontSize: 20, fontWeight: 'bold', color: colors.text },
+  title: { fontSize: 20, fontFamily: fonts.heading, color: colors.text },
 });

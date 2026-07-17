@@ -1,3 +1,4 @@
+import { Feather } from '@expo/vector-icons';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
 import {
@@ -22,7 +23,7 @@ import { listActiveProducts, type Product } from '@/lib/products';
 import { listStoreReviews, type StoreReview } from '@/lib/reviews';
 import { listStorePhotos, type StorePhoto } from '@/lib/store-photos';
 import { getStore, type Store } from '@/lib/stores';
-import { colors, radius, screenWrap, spacing } from '@/lib/theme';
+import { colors, fonts, radius, screenWrap, spacing } from '@/lib/theme';
 
 export default function BuyerStorePage() {
   const insets = useSafeAreaInsets();
@@ -139,10 +140,23 @@ export default function BuyerStorePage() {
     );
   }
 
+  const avgRating =
+    reviews && reviews.length > 0
+      ? (reviews.reduce((s, r) => s + r.rating, 0) / reviews.length)
+          .toFixed(1)
+          .replace('.', ',')
+      : null;
+
   return (
     <View style={[styles.container, { paddingTop: insets.top + 12 }]}>
-      <Pressable onPress={() => router.back()} hitSlop={12} style={styles.backWrap}>
-        <Text style={styles.back}>‹ Toko Terdekat</Text>
+      <Pressable
+        onPress={() => router.back()}
+        hitSlop={12}
+        style={styles.backWrap}
+        accessibilityRole="button"
+        accessibilityLabel="Kembali">
+        <Feather name="chevron-left" size={18} color={colors.primaryDark} />
+        <Text style={styles.back}>Toko Terdekat</Text>
       </Pressable>
 
       <View style={styles.titleRow}>
@@ -154,15 +168,37 @@ export default function BuyerStorePage() {
           hitSlop={12}
           accessibilityRole="button"
           accessibilityLabel={isFav ? 'Hapus dari favorit' : 'Tambah ke favorit'}>
-          <Text style={styles.favStar}>{isFav ? '⭐' : '☆'}</Text>
+          <Feather
+            name="star"
+            size={26}
+            color={isFav ? colors.sunny : colors.secondary}
+            style={isFav && { textShadowColor: colors.sunny }}
+          />
         </Pressable>
       </View>
+
+      <View style={styles.metaRow}>
+        {avgRating ? (
+          <View style={styles.metaItem}>
+            <Feather name="star" size={13} color={colors.amberText} />
+            <Text style={styles.metaRating}>
+              {avgRating} · {reviews!.length} ulasan
+            </Text>
+          </View>
+        ) : (
+          <Text style={styles.metaMuted}>Belum ada ulasan</Text>
+        )}
+        {(store.gmaps_url || (store.lat && store.lng)) && (
+          <>
+            <Text style={styles.metaMuted}>·</Text>
+            <Pressable onPress={openMaps} hitSlop={10} style={styles.metaItem}>
+              <Feather name="map-pin" size={14} color={colors.primaryDark} />
+              <Text style={styles.mapsLink}>Buka di Maps</Text>
+            </Pressable>
+          </>
+        )}
+      </View>
       {!!store.description && <Text style={styles.desc}>{store.description}</Text>}
-      {(store.gmaps_url || (store.lat && store.lng)) && (
-        <Pressable onPress={openMaps} hitSlop={12} style={styles.mapsWrap}>
-          <Text style={styles.mapsLink}>📍 Buka di Google Maps</Text>
-        </Pressable>
-      )}
 
       {photos.length > 0 && (
         <ScrollView
@@ -176,15 +212,15 @@ export default function BuyerStorePage() {
         </ScrollView>
       )}
 
-      <Text style={styles.sectionTitle}>Daftar Barang ({products.length})</Text>
+      <Text style={styles.sectionLabel}>Daftar barang ({products.length})</Text>
       <FlatList
         data={products}
         keyExtractor={(p) => p.id}
-        contentContainerStyle={{ gap: 8, paddingVertical: 8 }}
+        contentContainerStyle={{ gap: 9, paddingVertical: 10 }}
         ListEmptyComponent={
           <View style={styles.emptyCard}>
             <Text style={styles.emptyCardText}>
-              📦 Penjual belum mengisi daftar barang. Coba Ngomong Aja aja!
+              Penjual belum mengisi daftar barang. Coba Ngomong Aja aja!
             </Text>
           </View>
         }
@@ -195,23 +231,23 @@ export default function BuyerStorePage() {
               <Text style={styles.productPrice}>{formatRupiah(item.price)}</Text>
             </View>
             {item.stock === 0 ? (
-              <Text style={[styles.stockBadge, styles.outOfStock]}>Habis</Text>
+              <Text style={styles.outOfStock}>Habis</Text>
             ) : cart[item.id] ? (
-              <View style={styles.cartControls}>
+              <View style={styles.stepper}>
                 <Pressable
-                  style={styles.cartBtn}
+                  style={[styles.stepBtn, { backgroundColor: colors.neutralBg }]}
                   onPress={() => addToCart(item, -1)}
                   accessibilityRole="button"
                   accessibilityLabel={`Kurangi ${item.name}`}>
-                  <Text style={styles.cartBtnText}>−</Text>
+                  <Text style={[styles.stepBtnText, { color: colors.body }]}>−</Text>
                 </Pressable>
-                <Text style={styles.cartQty}>{cart[item.id]}</Text>
+                <Text style={styles.stepQty}>{cart[item.id]}</Text>
                 <Pressable
-                  style={styles.cartBtn}
+                  style={[styles.stepBtn, { backgroundColor: colors.primaryChipBg }]}
                   onPress={() => addToCart(item, 1)}
                   accessibilityRole="button"
                   accessibilityLabel={`Tambah ${item.name}`}>
-                  <Text style={styles.cartBtnText}>＋</Text>
+                  <Text style={[styles.stepBtnText, { color: colors.primaryDeep }]}>＋</Text>
                 </Pressable>
               </View>
             ) : (
@@ -228,38 +264,16 @@ export default function BuyerStorePage() {
       />
 
       {cartEntries.length > 0 && (
-        <Pressable style={styles.cartBar} onPress={checkoutCart} accessibilityRole="button">
+        <Pressable
+          style={({ pressed }) => [styles.cartBar, pressed && { backgroundColor: colors.neutralBg }]}
+          onPress={checkoutCart}
+          accessibilityRole="button">
           <Text style={styles.cartBarText}>
-            🛒 {cartEntries.length} barang · {formatRupiah(cartTotal)}
+            {cartEntries.length} barang · {formatRupiah(cartTotal)}
           </Text>
           <Text style={styles.cartBarAction}>Lanjut ›</Text>
         </Pressable>
       )}
-
-      <View style={styles.reviewsSection}>
-        <Text style={styles.sectionTitle}>Ulasan</Text>
-        {!reviews || reviews.length === 0 ? (
-          <Text style={styles.noReviews}>⭐ Belum ada ulasan — jadilah yang pertama!</Text>
-        ) : (
-          <>
-            <Text style={styles.ratingHeadline}>
-              ★{' '}
-              {(reviews.reduce((sum, r) => sum + r.rating, 0) / reviews.length)
-                .toFixed(1)
-                .replace('.', ',')}{' '}
-              · {reviews.length} ulasan
-            </Text>
-            {reviews
-              .filter((r) => !!r.comment)
-              .slice(0, 3)
-              .map((r, i) => (
-                <Text key={i} style={styles.reviewComment} numberOfLines={2}>
-                  {'★'.repeat(r.rating)} "{r.comment}"
-                </Text>
-              ))}
-          </>
-        )}
-      </View>
 
       {/* The heart of NgomongAja. */}
       <Pressable
@@ -269,9 +283,9 @@ export default function BuyerStorePage() {
         onPress={() =>
           router.push({ pathname: '/(buyer)/store/[id]/order', params: { id: store.id } })
         }>
-        <Text style={styles.voiceButtonText}>🎤 Ngomong Aja</Text>
+        <Feather name="mic" size={22} color={colors.onPrimary} />
+        <Text style={styles.voiceButtonText}>Ngomong Aja</Text>
       </Pressable>
-      <Text style={styles.voiceHelper}>✨ Pesan cukup dengan bicara</Text>
     </View>
   );
 }
@@ -285,138 +299,143 @@ const styles = StyleSheet.create({
     padding: spacing.xl,
     backgroundColor: colors.bg,
   },
-  errorText: { color: colors.body, fontSize: 15, textAlign: 'center' },
+  errorText: { fontFamily: fonts.body, color: colors.body, fontSize: 15, textAlign: 'center' },
   button: {
     backgroundColor: colors.primary,
-    borderRadius: radius.md,
-    paddingVertical: 12,
-    paddingHorizontal: 24,
+    borderRadius: radius.pill,
+    paddingVertical: 13,
+    paddingHorizontal: 26,
     alignItems: 'center',
   },
-  buttonText: { color: colors.white, fontSize: 16, fontWeight: '600' },
+  buttonText: { color: colors.onPrimary, fontSize: 16, fontFamily: fonts.heading },
   container: { ...screenWrap },
-  backWrap: { alignSelf: 'flex-start', paddingVertical: 12 },
-  back: { color: colors.primary, fontSize: 16, fontWeight: '600' },
-  title: { fontSize: 28, fontWeight: '800', color: colors.text },
-  titleRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
-  favStar: { fontSize: 30 },
+  backWrap: {
+    alignSelf: 'flex-start',
+    paddingVertical: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  back: { color: colors.primaryDark, fontSize: 15, fontFamily: fonts.bodySemi },
+  title: { fontFamily: fonts.heading, fontSize: 28, color: colors.text },
+  titleRow: { flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 6 },
+  metaRow: { flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 8 },
+  metaItem: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  metaRating: { fontFamily: fonts.bodySemi, fontSize: 13.5, color: colors.amberText },
+  metaMuted: { fontFamily: fonts.body, fontSize: 13.5, color: colors.secondary },
+  mapsLink: { fontFamily: fonts.bodySemi, color: colors.primaryDark, fontSize: 13.5 },
+  desc: { fontFamily: fonts.body, fontSize: 14, color: colors.body, marginTop: 6 },
+  gallery: { marginTop: spacing.lg, flexGrow: 0 },
+  galleryPhoto: {
+    width: 118,
+    height: 86,
+    borderRadius: radius.md,
+    backgroundColor: colors.neutralBg,
+  },
+  sectionLabel: {
+    fontFamily: fonts.bodySemi,
+    fontSize: 12.5,
+    letterSpacing: 1,
+    textTransform: 'uppercase',
+    color: colors.secondary,
+    marginTop: 22,
+  },
   emptyCard: {
-    backgroundColor: colors.sunnyBg,
+    backgroundColor: colors.amberBg,
     borderRadius: radius.lg,
     padding: 20,
     marginVertical: 8,
   },
-  emptyCardText: { color: colors.sunnyText, textAlign: 'center', fontSize: 16, lineHeight: 22 },
-  cartControls: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
-  cartBtn: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: colors.primarySoft,
-    borderWidth: 1,
-    borderColor: colors.primary,
+  emptyCardText: {
+    fontFamily: fonts.body,
+    color: colors.sunnyText,
+    textAlign: 'center',
+    fontSize: 15,
+    lineHeight: 22,
+  },
+  productRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: colors.card,
+    borderRadius: radius.lg,
+    paddingVertical: 13,
+    paddingHorizontal: 16,
+    gap: 12,
+  },
+  productName: { fontFamily: fonts.bodySemi, fontSize: 15, color: colors.text },
+  productPrice: {
+    fontFamily: fonts.bodyBold,
+    fontSize: 13.5,
+    color: colors.primaryDark,
+    marginTop: 2,
+  },
+  outOfStock: {
+    fontFamily: fonts.bodySemi,
+    fontSize: 12,
+    color: colors.sunnyText,
+    backgroundColor: colors.amberBg,
+    paddingHorizontal: 12,
+    paddingVertical: 5,
+    borderRadius: radius.pill,
+    overflow: 'hidden',
+  },
+  stepper: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    backgroundColor: colors.bg,
+    borderRadius: radius.pill,
+    paddingHorizontal: 8,
+    paddingVertical: 5,
+  },
+  stepBtn: {
+    width: 34,
+    height: 34,
+    borderRadius: radius.pill,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  cartBtnText: { fontSize: 18, color: colors.primaryDark, fontWeight: 'bold' },
-  cartQty: {
+  stepBtnText: { fontFamily: fonts.bodyBold, fontSize: 16 },
+  stepQty: {
+    fontFamily: fonts.bodyBold,
     fontSize: 15,
-    fontWeight: '600',
     minWidth: 20,
     textAlign: 'center',
     color: colors.text,
   },
   addBtn: {
-    backgroundColor: colors.primarySoft,
-    borderWidth: 1,
-    borderColor: colors.primary,
-    borderRadius: radius.md,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
+    backgroundColor: colors.primaryChipBg,
+    borderRadius: radius.pill,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
   },
-  addBtnText: { color: colors.primaryDark, fontSize: 13, fontWeight: '600' },
+  addBtnText: { color: colors.primaryDeep, fontSize: 13.5, fontFamily: fonts.heading },
   cartBar: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     backgroundColor: colors.card,
-    borderWidth: 2,
-    borderColor: colors.primary,
-    borderRadius: radius.lg,
-    padding: 14,
+    borderRadius: radius.pill,
+    paddingVertical: 14,
+    paddingHorizontal: 20,
     marginBottom: spacing.sm,
   },
-  cartBarText: { fontSize: 15, fontWeight: '600', color: colors.primaryDark },
-  cartBarAction: { fontSize: 15, fontWeight: 'bold', color: colors.primary },
-  desc: { fontSize: 14, color: colors.body, marginTop: 4 },
-  mapsWrap: { alignSelf: 'flex-start', paddingVertical: 12 },
-  mapsLink: { color: '#2563eb', fontSize: 14, fontWeight: '500' },
-  gallery: { marginTop: spacing.md, flexGrow: 0 },
-  galleryPhoto: {
-    width: 120,
-    height: 90,
-    borderRadius: radius.sm,
-    backgroundColor: colors.neutralBg,
-  },
-  reviewsSection: { gap: 4, marginBottom: spacing.md },
-  ratingHeadline: { fontSize: 15, fontWeight: '600', color: colors.amber, marginTop: 2 },
-  noReviews: { fontSize: 13, color: colors.body, marginTop: 2 },
-  reviewComment: { fontSize: 13, color: colors.body, lineHeight: 18 },
-  sectionTitle: { fontSize: 16, fontWeight: '600', marginTop: 16, color: colors.text },
-  empty: { color: colors.body, textAlign: 'center', marginTop: 24 },
-  productRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: colors.card,
-    borderRadius: radius.md,
-    padding: 14,
-    borderWidth: 1,
-    borderColor: colors.border,
-    gap: 12,
-  },
-  productName: { fontSize: 15, fontWeight: '500', color: colors.text },
-  productPrice: {
-    fontSize: 14,
-    color: colors.primaryDark,
-    marginTop: 2,
-    fontWeight: '600',
-  },
-  stockBadge: {
-    fontSize: 12,
-    color: colors.secondary,
-    backgroundColor: colors.neutralBg,
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: radius.pill,
-    overflow: 'hidden',
-  },
-  outOfStock: {
-    color: colors.dangerDark,
-    backgroundColor: colors.dangerBg,
-    fontWeight: '600',
-  },
+  cartBarText: { fontFamily: fonts.heading, fontSize: 15, color: colors.primaryDeep },
+  cartBarAction: { fontFamily: fonts.heading, fontSize: 15, color: colors.primary },
   voiceButton: {
     backgroundColor: colors.primary,
-    borderRadius: radius.xl,
-    height: 64,
-    justifyContent: 'center',
+    borderRadius: radius.pill,
+    padding: 17,
+    flexDirection: 'row',
     alignItems: 'center',
-    borderBottomWidth: 3,
-    borderBottomColor: colors.primaryDark,
-    borderWidth: 2,
-    borderColor: colors.sunny,
+    justifyContent: 'center',
+    gap: 10,
+    shadowColor: '#2e2b25',
+    shadowOpacity: 0.16,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 3 },
+    elevation: 4,
   },
-  voiceButtonPressed: {
-    backgroundColor: colors.primaryDark,
-    borderBottomWidth: 0,
-    transform: [{ scale: 0.98 }],
-  },
-  voiceButtonText: { color: colors.white, fontSize: 22, fontWeight: '800' },
-  voiceHelper: {
-    textAlign: 'center',
-    color: colors.secondary,
-    fontSize: 14,
-    marginTop: 8,
-    marginBottom: 4,
-  },
+  voiceButtonPressed: { backgroundColor: colors.primaryDark },
+  voiceButtonText: { color: colors.onPrimary, fontSize: 19, fontFamily: fonts.heading },
 });

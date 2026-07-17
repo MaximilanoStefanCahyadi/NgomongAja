@@ -62,6 +62,8 @@ export type OrderRow = {
   stores: { name: string; owner_id: string } | null;
   buyer: { full_name: string; phone: string | null } | null;
   payments: { method: PaymentMethod; status: 'pending' | 'paid' | 'voided' }[];
+  // Lightweight item summary for list cards ("Minyak Goreng × 2 · Telur × 0,5 kg").
+  order_items: { quantity: number; products: { name: string } | null }[];
 };
 
 export type OrderItemRow = {
@@ -79,7 +81,7 @@ export type OrderItemRow = {
 };
 
 const ORDER_SELECT =
-  'id, buyer_id, store_id, status, fulfillment, delivery_address, delivery_fee, total, created_at, stores(name, owner_id), buyer:profiles(full_name, phone), payments(method, status)';
+  'id, buyer_id, store_id, status, fulfillment, delivery_address, delivery_fee, total, created_at, stores(name, owner_id), buyer:profiles(full_name, phone), payments(method, status), order_items(quantity, products(name))';
 
 // Check-on-read expiry (PRD AS-12): call before loading any order list.
 export async function expireStaleOrders(): Promise<void> {

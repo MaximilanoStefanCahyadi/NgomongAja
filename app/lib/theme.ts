@@ -1,46 +1,42 @@
-// Shared design tokens — "cheerful, warm, easy to understand for any age".
-// Every screen imports from here instead of hard-coding hex values.
-// Cheer = warm sunny surfaces + rounder shapes + one happy accent (sunny yellow),
-// NOT many colors. All text pairs meet WCAG AA (see ratios in lib/theme notes).
+// Shared design tokens — "Hijau Rupiah" from the approved Claude Design project
+// (NgomongAja.dc.html, sections 2a + 4a in palette 3a).
+// Language: warm paper surfaces, deep rupiah green, orange accent,
+// Caprasimo display type + Figtree body, pill buttons, borderless cards.
 
 export const colors = {
-  // Surfaces — warm & sunny
-  bg: '#fff9f0', // sunny cream — the whole app sits on this
-  card: '#ffffff',
-  border: '#efe7db', // warm hairline border for cards
-  inputBorder: '#d8cfbf',
+  // Surfaces — warm paper
+  bg: '#fbf7ec', // paper — the whole app sits on this
+  card: '#efe8d3', // warm surface — cards sit on paper WITHOUT borders
+  border: '#ded5c3', // hairline (≈16% ink over paper)
+  inputBorder: '#ded5c3',
 
-  // Text — warm near-black + AA-safe grays
-  text: '#26302b', // titles & primary copy (~13:1 on bg)
-  body: '#4f5b54', // body text (~7:1)
-  secondary: '#5c655f', // secondary/meta text (~5.6:1 — AA)
+  // Text — warm ink + neutral ramp
+  text: '#201e1d',
+  body: '#645c50', // neutral-700
+  secondary: '#82796a', // neutral-600 (meta text)
 
-  // Brand green — `primary` is a FILL that carries white text at 4.95:1
-  primary: '#0d8143', // button fills
-  primaryDark: '#0a6535', // pressed state / green text on light
-  primaryDeep: '#063d20', // deepest green — chip & badge text (AA on light green)
-  primarySoft: '#eafaf0', // soft green fill for outline buttons
-  primaryChipBg: '#d6f5e0', // green chip/badge background
-  primaryChipBorder: '#8fe3ab',
-  disabled: '#a9cdb8', // disabled state of the primary button
+  // Rupiah green (accent-2 ramp)
+  primary: '#0c8f43', // fills; paper/white text on top
+  primaryDark: '#0a7437', // pressed (600)
+  primaryDeep: '#05431f', // deepest green text (800)
+  primarySoft: '#e0f7e7', // green-100 soft fill
+  primaryChipBg: '#c0edd0', // green-200 chip/badge background
+  primaryChipBorder: '#8fdcaa', // green-300
+  primaryBright: '#0c8f43', // graphics accent (same as primary in this palette)
+  disabled: '#9fceb2',
 
-  // Bright brand accent — lively green for GRAPHICS only (not small text)
-  primaryBright: '#22c55e', // active timeline dot, highlight rings, icon circles
+  // Orange accent (accent ramp) — notices, "Tutup"/"Habis", payment-pending
+  sunny: '#f08c00',
+  sunnyBg: '#fff0d8', // accent-100
+  sunnyText: '#784200', // accent-800
+  amber: '#f08c00',
+  amberBorder: '#ffc670', // accent-300
+  amberBg: '#fff0d8', // accent-100
+  amberText: '#784200', // accent-800
+  amberSoft: '#fff0d8',
+  amberSoftBorder: '#ffc670',
 
-  // Sunny yellow — the "cheer" accent
-  sunny: '#ffc233', // voice-button accent, favorite highlight, celebration
-  sunnyBg: '#fff4d1', // soft sunny fill for celebratory banners / empty states
-  sunnyText: '#7a4f00', // dark bold text ON sunny / sunnyBg
-
-  // Warm amber accents
-  amber: '#f59e0b',
-  amberBorder: '#fbbf24',
-  amberBg: '#fff3d0',
-  amberText: '#8a4b00', // darkened for AA on amberBg
-  amberSoft: '#fffaeb',
-  amberSoftBorder: '#f6cf4d',
-
-  // Danger
+  // Danger (kept — the design has no destructive ramp)
   danger: '#dc2626',
   dangerDark: '#b42318',
   dangerBg: '#fdecea',
@@ -51,9 +47,18 @@ export const colors = {
   infoBg: '#dbeafe',
   teal: '#0f766e',
   tealBg: '#ccfbf1',
-  neutralBg: '#f4f1ea', // warm neutral
+  neutralBg: '#eee7db', // neutral-200 warm
 
   white: '#ffffff',
+  onPrimary: '#fbf7ec', // paper text on green fills (per the design)
+} as const;
+
+// Type — Caprasimo carries titles, buttons, and big numbers; Figtree the rest.
+export const fonts = {
+  heading: 'Caprasimo_400Regular',
+  body: 'Figtree_400Regular',
+  bodySemi: 'Figtree_600SemiBold',
+  bodyBold: 'Figtree_700Bold',
 } as const;
 
 export const spacing = {
@@ -62,15 +67,15 @@ export const spacing = {
   md: 12,
   lg: 16,
   xl: 24,
-  xxl: 32, // section separation, breathing room
+  xxl: 32,
 } as const;
 
 export const radius = {
-  sm: 12, // rounder = friendlier
-  md: 16,
-  lg: 20,
-  xl: 28, // hero voice button & feature cards
-  pill: 999,
+  sm: 14,
+  md: 18, // thumbnails, small cards
+  lg: 24, // list cards
+  xl: 28, // hero cards
+  pill: 999, // every button and input
 } as const;
 
 // Shared screen container. Screens add `paddingTop: insets.top + 12`

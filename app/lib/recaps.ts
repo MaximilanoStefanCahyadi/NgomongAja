@@ -20,6 +20,42 @@ function periodStart(period: RecapPeriod): Date {
   return new Date(now.getFullYear(), now.getMonth(), 1);
 }
 
+// Last-7-days PAID revenue per day, oldest first — feeds the recap bar chart.
+export type DailyRevenue = { label: string; total: number; isToday: boolean };
+
+export async function fetchDailyRevenue(storeId: string): Promise<DailyRevenue[]> {
+  const now = new Date();
+  const start = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  start.setDate(start.getDate() - 6);
+
+  const { data, error } = await supabase
+    .from('orders')
+    .select('total, created_at, payments(status)')
+    .eq('store_id', storeId)
+    .eq('status', 'completed')
+    .gte('created_at', start.toISOString());
+  if (error) throw error;
+
+  const days: DailyRevenue[] = [];
+  for (let i = 0; i < 7; i++) {
+    const d = new Date(start);
+    d.setDate(start.getDate() + i);
+    days.push({
+      label: d.toLocaleDateString('id-ID', { weekday: 'short' }),
+      total: 0,
+      isToday: i === 6,
+    });
+  }
+  for (const o of data as any[]) {
+    if (o.payments?.[0]?.status !== 'paid') continue; // chart shows money in hand
+    const idx = Math.floor(
+      (new Date(o.created_at).getTime() - start.getTime()) / 86400000
+    );
+    if (idx >= 0 && idx < 7) days[idx].total += o.total;
+  }
+  return days;
+}
+
 // Recaps are honest (PRD S-1/S-3): paid and unpaid revenue are separated so
 // the number on screen can be reconciled with the cash drawer.
 export async function fetchRecap(storeId: string, period: RecapPeriod): Promise<Recap> {

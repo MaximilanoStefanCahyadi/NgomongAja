@@ -30,7 +30,7 @@ import {
 import { listActiveProducts, type Product } from '@/lib/products';
 import { PAYMENT_METHOD_LABEL } from '@/lib/status-ui';
 import { getStore, type Store } from '@/lib/stores';
-import { colors, radius, scrollWrap, spacing } from '@/lib/theme';
+import { colors, fonts, radius, scrollWrap, spacing } from '@/lib/theme';
 
 type Line = {
   key: string;
@@ -133,7 +133,7 @@ export default function ReviewOrder() {
       ? `Pilih dulu ${unresolved} barang di atas`
       : needsAddress
         ? 'Pilih alamat dulu'
-        : 'Buat Pesanan';
+        : 'Kirim Pesanan';
 
   const confirm = async () => {
     if (!profile) return;
@@ -344,21 +344,25 @@ export default function ReviewOrder() {
           </View>
         ))}
 
-        <Text style={styles.sectionTitle}>Diantar atau ambil sendiri?</Text>
-        <View style={styles.rowGap}>
+        <Text style={styles.sectionTitle}>Cara terima</Text>
+        <View style={styles.seg}>
           <Pressable
-            style={[styles.choice, fulfillment === 'pickup' && styles.choiceSelected]}
+            style={[styles.segOpt, fulfillment === 'pickup' && styles.segOptOn]}
             onPress={() => setFulfillment('pickup')}
             accessibilityRole="button"
             accessibilityState={{ selected: fulfillment === 'pickup' }}>
-            <Text style={styles.choiceText}>🏪 Ambil sendiri</Text>
+            <Text style={[styles.segText, fulfillment === 'pickup' && styles.segTextOn]}>
+              Ambil Sendiri
+            </Text>
           </Pressable>
           <Pressable
-            style={[styles.choice, fulfillment === 'delivery' && styles.choiceSelected]}
+            style={[styles.segOpt, fulfillment === 'delivery' && styles.segOptOn]}
             onPress={() => setFulfillment('delivery')}
             accessibilityRole="button"
             accessibilityState={{ selected: fulfillment === 'delivery' }}>
-            <Text style={styles.choiceText}>🛵 Diantar (+{formatRupiah(storeFee)})</Text>
+            <Text style={[styles.segText, fulfillment === 'delivery' && styles.segTextOn]}>
+              Diantar (+{formatRupiah(storeFee)})
+            </Text>
           </Pressable>
         </View>
 
@@ -414,23 +418,33 @@ export default function ReviewOrder() {
 
         <Text style={styles.sectionTitle}>Pembayaran</Text>
         <Text style={styles.demoBanner}>DEMO — tidak ada uang berpindah</Text>
-        <View style={styles.rowGap}>
+        <View style={styles.radioGroup}>
           {(Object.keys(PAYMENT_METHOD_LABEL) as PaymentMethod[]).map((m) => (
             <Pressable
               key={m}
-              style={[styles.choice, method === m && styles.choiceSelected]}
+              style={styles.radioRow}
               onPress={() => setMethod(m)}
-              accessibilityRole="button"
+              accessibilityRole="radio"
               accessibilityState={{ selected: method === m }}>
-              <Text style={styles.choiceText}>{PAYMENT_METHOD_LABEL[m]}</Text>
+              <View style={[styles.radioDot, method === m && styles.radioDotOn]} />
+              <Text style={styles.radioLabel}>{PAYMENT_METHOD_LABEL[m]}</Text>
             </Pressable>
           ))}
         </View>
 
         <View style={styles.totals}>
-          <Text style={styles.totalRow}>Barang: {formatRupiah(itemsTotal)}</Text>
-          {fee > 0 && <Text style={styles.totalRow}>Ongkir: {formatRupiah(fee)}</Text>}
-          <Text style={styles.grandTotal}>Total: {formatRupiah(grandTotal)}</Text>
+          <View style={styles.totalLine}>
+            <Text style={styles.totalRow}>Barang</Text>
+            <Text style={styles.totalRow}>{formatRupiah(itemsTotal)}</Text>
+          </View>
+          <View style={styles.totalLine}>
+            <Text style={styles.totalRow}>Ongkir</Text>
+            <Text style={styles.totalRow}>{formatRupiah(fee)}</Text>
+          </View>
+          <View style={[styles.totalLine, { marginTop: 6 }]}>
+            <Text style={styles.grandTotal}>Total</Text>
+            <Text style={styles.grandTotal}>{formatRupiah(grandTotal)}</Text>
+          </View>
         </View>
 
         {unresolved > 0 && (
@@ -465,24 +479,29 @@ const styles = StyleSheet.create({
   },
   container: { ...scrollWrap, gap: 10 },
   backWrap: { alignSelf: 'flex-start', paddingVertical: 12 },
-  back: { color: colors.primary, fontSize: 16, fontWeight: '600' },
-  title: { fontSize: 26, fontWeight: 'bold', color: colors.text },
-  storeName: { fontSize: 15, fontWeight: '600', color: colors.primaryDark },
+  back: { color: colors.primaryDark, fontSize: 15, fontFamily: fonts.bodySemi },
+  title: { fontFamily: fonts.heading, fontSize: 28, color: colors.text },
+  storeName: { fontFamily: fonts.bodySemi, fontSize: 14.5, color: colors.primaryDark },
   transcript: {
+    fontFamily: fonts.body,
     fontSize: 14,
     fontStyle: 'italic',
     color: colors.body,
     marginBottom: 6,
   },
-  hint: { fontSize: 15, color: colors.body, textAlign: 'center', lineHeight: 22 },
-  hintSmall: { fontSize: 13, color: colors.secondary },
+  hint: {
+    fontFamily: fonts.body,
+    fontSize: 15,
+    color: colors.body,
+    textAlign: 'center',
+    lineHeight: 23,
+  },
+  hintSmall: { fontFamily: fonts.body, fontSize: 13, color: colors.secondary },
   successEmoji: { fontSize: 72 },
   lineCard: {
     backgroundColor: colors.card,
     borderRadius: radius.lg,
     padding: 14,
-    borderWidth: 1,
-    borderColor: colors.border,
     gap: 10,
   },
   lineHeader: {
@@ -491,7 +510,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: spacing.sm,
   },
-  lineName: { fontSize: 15, fontWeight: '600', flex: 1, color: colors.text },
+  lineName: { fontFamily: fonts.bodySemi, fontSize: 15, flex: 1, color: colors.text },
   remove: {
     width: 44,
     height: 44,
@@ -501,99 +520,141 @@ const styles = StyleSheet.create({
   removeText: { fontSize: 18, color: colors.danger },
   lineControls: { flexDirection: 'row', alignItems: 'center', gap: 12 },
   stepBtn: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: colors.primarySoft,
-    borderWidth: 1,
-    borderColor: colors.primary,
+    width: 40,
+    height: 40,
+    borderRadius: radius.pill,
+    backgroundColor: colors.neutralBg,
     justifyContent: 'center',
     alignItems: 'center',
   },
-  stepBtnText: { fontSize: 20, color: colors.primaryDark, fontWeight: 'bold' },
+  stepBtnText: { fontFamily: fonts.bodyBold, fontSize: 18, color: colors.primaryDeep },
   qty: {
+    fontFamily: fonts.bodyBold,
     fontSize: 15,
-    fontWeight: '500',
     minWidth: 56,
     textAlign: 'center',
     color: colors.text,
   },
   lineSubtotal: {
     marginLeft: 'auto',
+    fontFamily: fonts.bodyBold,
     fontSize: 15,
-    fontWeight: '600',
     color: colors.primaryDark,
   },
   candidates: { gap: 6 },
   candidate: {
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: radius.sm,
-    padding: 12,
+    borderRadius: radius.pill,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
     backgroundColor: colors.bg,
   },
-  candidateText: { fontSize: 14, color: colors.text },
+  candidateText: { fontFamily: fonts.bodySemi, fontSize: 14, color: colors.text },
   search: {
     borderWidth: 1,
     borderColor: colors.inputBorder,
-    borderRadius: radius.sm,
-    padding: 10,
+    borderRadius: radius.pill,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
     fontSize: 14,
-    backgroundColor: colors.card,
+    fontFamily: fonts.body,
+    backgroundColor: colors.bg,
     color: colors.text,
   },
-  sectionTitle: { fontSize: 16, fontWeight: '600', marginTop: 10, color: colors.text },
-  rowGap: { gap: spacing.sm },
+  sectionTitle: {
+    fontFamily: fonts.bodySemi,
+    fontSize: 12.5,
+    letterSpacing: 1,
+    textTransform: 'uppercase',
+    color: colors.secondary,
+    marginTop: 16,
+  },
+  seg: {
+    flexDirection: 'row',
+    alignSelf: 'flex-start',
+    backgroundColor: colors.card,
+    borderRadius: radius.pill,
+    padding: 3,
+  },
+  segOpt: {
+    paddingHorizontal: 18,
+    paddingVertical: 10,
+    borderRadius: radius.pill,
+  },
+  segOptOn: { backgroundColor: colors.primary },
+  segText: { fontFamily: fonts.bodySemi, fontSize: 14, color: colors.body },
+  segTextOn: { color: colors.onPrimary },
+  radioGroup: { gap: 4 },
+  radioRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    paddingVertical: 9,
+  },
+  radioDot: {
+    width: 18,
+    height: 18,
+    borderRadius: radius.pill,
+    borderWidth: 1.5,
+    borderColor: colors.inputBorder,
+    backgroundColor: colors.bg,
+  },
+  radioDotOn: { borderWidth: 5.5, borderColor: colors.primary },
+  radioLabel: { fontFamily: fonts.body, fontSize: 14.5, color: colors.text },
   choice: {
     borderWidth: 2,
-    borderColor: colors.border,
-    borderRadius: radius.md,
-    padding: 12,
+    borderColor: 'transparent',
+    borderRadius: radius.lg,
+    padding: 13,
     backgroundColor: colors.card,
   },
   choiceSelected: { borderColor: colors.primary, backgroundColor: colors.primarySoft },
-  choiceText: { fontSize: 14, fontWeight: '500', color: colors.text },
+  choiceText: { fontFamily: fonts.bodySemi, fontSize: 14, color: colors.text },
   addressBox: { gap: spacing.sm },
   newAddressToggle: {
     borderWidth: 2,
     borderColor: colors.primary,
     borderStyle: 'dashed',
-    borderRadius: radius.md,
+    borderRadius: radius.pill,
     padding: 12,
     alignItems: 'center',
     backgroundColor: colors.primarySoft,
   },
-  newAddressToggleText: { color: colors.primaryDark, fontSize: 14, fontWeight: '600' },
+  newAddressToggleText: {
+    color: colors.primaryDark,
+    fontSize: 14,
+    fontFamily: fonts.bodySemi,
+  },
   demoBanner: {
     alignSelf: 'flex-start',
-    fontSize: 12,
-    fontWeight: '700',
+    fontFamily: fonts.bodyBold,
+    fontSize: 11.5,
     color: colors.amberText,
     backgroundColor: colors.amberBg,
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 5,
+    borderRadius: radius.pill,
     overflow: 'hidden',
   },
-  totals: { marginTop: 10, gap: 2 },
-  totalRow: { fontSize: 14, color: colors.body, textAlign: 'right' },
-  grandTotal: { fontSize: 18, fontWeight: 'bold', textAlign: 'right', color: colors.text },
-  payAmount: { fontSize: 34, fontWeight: 'bold', color: colors.text },
-  warn: { color: '#b45309', fontSize: 15 },
+  totals: { marginTop: 14, gap: 4, paddingHorizontal: 4 },
+  totalLine: { flexDirection: 'row', justifyContent: 'space-between' },
+  totalRow: { fontFamily: fonts.body, fontSize: 14, color: colors.body },
+  grandTotal: { fontFamily: fonts.heading, fontSize: 20, color: colors.text },
+  payAmount: { fontFamily: fonts.heading, fontSize: 38, color: colors.text },
+  warn: { fontFamily: fonts.bodySemi, color: colors.sunnyText, fontSize: 15 },
   button: {
     backgroundColor: colors.primary,
-    borderRadius: radius.md,
-    padding: 14,
+    borderRadius: radius.pill,
+    padding: 16,
     alignItems: 'center',
     marginTop: spacing.sm,
   },
   buttonDisabled: { backgroundColor: colors.disabled },
   buttonText: {
-    color: colors.white,
-    fontSize: 16,
-    fontWeight: '600',
+    color: colors.onPrimary,
+    fontSize: 17,
+    fontFamily: fonts.heading,
     textAlign: 'center',
   },
   linkWrap: { paddingVertical: 12 },
-  linkText: { color: colors.body, fontSize: 14 },
+  linkText: { fontFamily: fonts.body, color: colors.body, fontSize: 14 },
 });

@@ -15,7 +15,7 @@ import { useAuth } from '@/lib/auth-context';
 import { formatRupiah } from '@/lib/format';
 import { expireStaleOrders, listMyOrders, type OrderRow } from '@/lib/orders';
 import { PAYMENT_BADGE, STATUS_CHIP } from '@/lib/status-ui';
-import { colors, radius, screenWrap, spacing } from '@/lib/theme';
+import { colors, fonts, radius, screenWrap, spacing } from '@/lib/theme';
 
 // "2026-07-15T…" -> "15 Jul 2026"
 function formatDate(iso: string): string {
@@ -160,7 +160,7 @@ const styles = StyleSheet.create({
   container: { ...screenWrap },
   backWrap: { alignSelf: 'flex-start', paddingVertical: 12 },
   back: { color: colors.primary, fontSize: 16, fontWeight: '600' },
-  title: { fontSize: 30, fontWeight: '800', color: colors.text },
+  title: { fontSize: 30, fontFamily: fonts.heading, color: colors.text },
   empty: { color: colors.body, textAlign: 'center', marginTop: 32, lineHeight: 20 },
   emptyBox: { alignItems: 'center', gap: spacing.md },
   emptyButton: {
@@ -169,7 +169,7 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     paddingHorizontal: 24,
   },
-  emptyButtonText: { color: colors.white, fontSize: 15, fontWeight: '600' },
+  emptyButtonText: { color: colors.onPrimary, fontSize: 15, fontWeight: '600' },
   card: {
     backgroundColor: colors.card,
     borderRadius: radius.lg,
@@ -179,10 +179,10 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   cardHeader: { flexDirection: 'row', justifyContent: 'space-between', gap: spacing.sm },
-  storeName: { fontSize: 16, fontWeight: '600', flex: 1, color: colors.text },
+  storeName: { fontSize: 16, fontFamily: fonts.bodySemi, flex: 1, color: colors.text },
   chip: {
     fontSize: 12,
-    fontWeight: '600',
+    fontFamily: fonts.bodySemi,
     paddingHorizontal: 10,
     paddingVertical: 4,
     borderRadius: radius.pill,
@@ -194,10 +194,10 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
   },
-  total: { fontSize: 15, fontWeight: 'bold', color: colors.primaryDark },
+  total: { fontSize: 15, fontFamily: fonts.heading, color: colors.primaryDark },
   payBadge: {
     fontSize: 12,
-    fontWeight: '600',
+    fontFamily: fonts.bodySemi,
     paddingHorizontal: 10,
     paddingVertical: 4,
     borderRadius: radius.pill,

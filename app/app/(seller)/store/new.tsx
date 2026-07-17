@@ -17,7 +17,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuth } from '@/lib/auth-context';
 import { friendlyError } from '@/lib/errors';
 import { createStore } from '@/lib/stores';
-import { colors, radius, scrollWrap } from '@/lib/theme';
+import { colors, fonts, radius, scrollWrap } from '@/lib/theme';
 
 export default function NewStore() {
   const insets = useSafeAreaInsets();
@@ -163,8 +163,8 @@ const styles = StyleSheet.create({
   container: { ...scrollWrap, gap: 12 },
   backWrap: { alignSelf: 'flex-start', paddingVertical: 12 },
   back: { color: colors.primary, fontSize: 16, fontWeight: '600' },
-  title: { fontSize: 28, fontWeight: 'bold', marginBottom: 8, color: colors.text },
-  label: { fontSize: 13, fontWeight: '700', color: colors.body, marginTop: 4 },
+  title: { fontSize: 28, fontFamily: fonts.heading, marginBottom: 8, color: colors.text },
+  label: { fontSize: 13, fontFamily: fonts.bodyBold, color: colors.body, marginTop: 4 },
   input: {
     borderWidth: 1,
     borderColor: colors.inputBorder,
@@ -192,7 +192,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginTop: 8,
   },
-  buttonText: { color: colors.white, fontSize: 16, fontWeight: '600' },
+  buttonText: { color: colors.onPrimary, fontSize: 16, fontWeight: '600' },
   cancelWrap: { alignSelf: 'center', paddingVertical: 12, marginTop: 8 },
   cancel: { textAlign: 'center', color: colors.body, fontSize: 14 },
 });

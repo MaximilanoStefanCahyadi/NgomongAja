@@ -14,7 +14,7 @@ import {
 
 import { friendlyError } from '@/lib/errors';
 import { supabase } from '@/lib/supabase';
-import { colors, radius, spacing } from '@/lib/theme';
+import { colors, fonts, radius, spacing } from '@/lib/theme';
 
 type Role = 'buyer' | 'seller';
 
@@ -154,40 +154,48 @@ const styles = StyleSheet.create({
     backgroundColor: colors.bg,
   },
   title: {
-    fontSize: 28,
-    fontWeight: 'bold',
+    fontFamily: fonts.heading,
+    fontSize: 30,
     textAlign: 'center',
     marginBottom: spacing.sm,
     color: colors.text,
   },
-  label: { fontSize: 13, fontWeight: '700', color: colors.body, marginTop: spacing.xs },
+  label: { fontFamily: fonts.body, fontSize: 12, color: colors.body, marginTop: spacing.xs },
   roleOption: {
     borderWidth: 2,
     borderColor: colors.border,
-    borderRadius: radius.md,
-    padding: 12,
+    borderRadius: radius.lg,
+    padding: 14,
     backgroundColor: colors.card,
   },
   roleSelected: { borderColor: colors.primary, backgroundColor: colors.primarySoft },
-  roleTitle: { fontSize: 16, fontWeight: '600', color: colors.text },
-  roleDesc: { fontSize: 13, color: colors.body, marginTop: 2 },
+  roleTitle: { fontFamily: fonts.heading, fontSize: 17, color: colors.text },
+  roleDesc: { fontFamily: fonts.body, fontSize: 13, color: colors.body, marginTop: 2 },
   input: {
+    minHeight: 46,
     borderWidth: 1,
     borderColor: colors.inputBorder,
-    borderRadius: radius.md,
-    padding: 12,
-    fontSize: 16,
+    borderRadius: radius.pill,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    fontSize: 15,
+    fontFamily: fonts.body,
     backgroundColor: colors.card,
     color: colors.text,
   },
   button: {
     backgroundColor: colors.primary,
-    borderRadius: radius.md,
-    padding: 14,
+    borderRadius: radius.pill,
+    padding: 15,
     alignItems: 'center',
     marginTop: spacing.sm,
   },
-  buttonText: { color: colors.white, fontSize: 16, fontWeight: '600' },
+  buttonText: { color: colors.onPrimary, fontSize: 17, fontFamily: fonts.heading },
   linkWrap: { alignSelf: 'center', paddingVertical: 12, marginTop: spacing.xs },
-  link: { textAlign: 'center', color: colors.primary, fontSize: 14, fontWeight: '600' },
+  link: {
+    textAlign: 'center',
+    color: colors.primaryDark,
+    fontSize: 14,
+    fontFamily: fonts.bodyBold,
+  },
 });

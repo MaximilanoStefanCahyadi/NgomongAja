@@ -1,3 +1,4 @@
+import { Feather } from '@expo/vector-icons';
 import { useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
@@ -20,10 +21,10 @@ import {
   subscribeToMessages,
   type Message,
 } from '@/lib/chat';
-import { colors, radius } from '@/lib/theme';
+import { colors, fonts, radius } from '@/lib/theme';
 
 // One chat per order, shared by buyer and seller screens.
-// Message types: text (bubbles), payment_request (amber card), system (grey note).
+// Message types: text (bubbles), payment_request (orange card), system (pill note).
 export function OrderChat({ orderId, myId }: { orderId: string; myId: string }) {
   const insets = useSafeAreaInsets();
   const [chatId, setChatId] = useState<string | null>(null);
@@ -98,7 +99,7 @@ export function OrderChat({ orderId, myId }: { orderId: string; myId: string }) 
 
   return (
     <KeyboardAvoidingView
-      style={{ flex: 1 }}
+      style={{ flex: 1, backgroundColor: colors.bg }}
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       keyboardVerticalOffset={insets.top + 44}>
       <FlatList
@@ -108,18 +109,20 @@ export function OrderChat({ orderId, myId }: { orderId: string; myId: string }) 
         contentContainerStyle={styles.list}
         onContentSizeChange={() => listRef.current?.scrollToEnd({ animated: false })}
         ListEmptyComponent={
-          <Text style={styles.emptyHint}>
-            Belum ada pesan. Sapa dulu yuk 👋
-          </Text>
+          <Text style={styles.emptyHint}>Belum ada pesan. Sapa dulu yuk 👋</Text>
         }
         renderItem={({ item: m }) => {
           if (m.type === 'system') {
-            return <Text style={styles.system}>ℹ️ {m.body}</Text>;
+            return (
+              <View style={styles.systemPill}>
+                <Text style={styles.systemText}>{m.body}</Text>
+              </View>
+            );
           }
           if (m.type === 'payment_request') {
             return (
               <View style={styles.paymentRequest}>
-                <Text style={styles.paymentRequestTitle}>💰 Permintaan pembayaran</Text>
+                <Text style={styles.paymentRequestTitle}>Permintaan pembayaran</Text>
                 <Text style={styles.paymentRequestBody}>{m.body}</Text>
               </View>
             );
@@ -132,7 +135,7 @@ export function OrderChat({ orderId, myId }: { orderId: string; myId: string }) 
           );
         }}
       />
-      <View style={[styles.composer, { paddingBottom: Math.max(insets.bottom, 10) }]}>
+      <View style={[styles.composer, { paddingBottom: Math.max(insets.bottom, 12) }]}>
         <TextInput
           style={styles.input}
           placeholder="Tulis pesan…"
@@ -147,7 +150,11 @@ export function OrderChat({ orderId, myId }: { orderId: string; myId: string }) 
           disabled={sending || !draft.trim()}
           accessibilityRole="button"
           accessibilityLabel="Kirim pesan">
-          <Text style={styles.sendText}>{sending ? '…' : 'Kirim'}</Text>
+          {sending ? (
+            <ActivityIndicator size="small" color={colors.onPrimary} />
+          ) : (
+            <Feather name="send" size={21} color={colors.onPrimary} />
+          )}
         </Pressable>
       </View>
     </KeyboardAvoidingView>
@@ -163,57 +170,109 @@ const styles = StyleSheet.create({
     padding: 24,
     backgroundColor: colors.bg,
   },
-  errorText: { color: colors.body, fontSize: 15, textAlign: 'center' },
+  errorText: { fontFamily: fonts.body, color: colors.body, fontSize: 15, textAlign: 'center' },
   retry: {
     backgroundColor: colors.primary,
-    borderRadius: radius.md,
-    paddingVertical: 12,
-    paddingHorizontal: 24,
+    borderRadius: radius.pill,
+    paddingVertical: 13,
+    paddingHorizontal: 26,
   },
-  retryText: { color: colors.white, fontSize: 15, fontWeight: '600' },
-  list: { padding: 16, gap: 8, flexGrow: 1 },
-  emptyHint: { textAlign: 'center', color: colors.secondary, marginTop: 40, fontSize: 14 },
-  bubble: { maxWidth: '80%', borderRadius: 14, paddingHorizontal: 14, paddingVertical: 9 },
-  mine: { alignSelf: 'flex-end', backgroundColor: colors.primary },
-  theirs: { alignSelf: 'flex-start', backgroundColor: colors.neutralBg },
-  mineText: { color: colors.white, fontSize: 15 },
-  theirsText: { color: colors.text, fontSize: 15 },
-  system: { alignSelf: 'center', color: colors.secondary, fontSize: 12, fontStyle: 'italic' },
+  retryText: { color: colors.onPrimary, fontSize: 15, fontFamily: fonts.heading },
+  list: { padding: 20, gap: 10, flexGrow: 1 },
+  emptyHint: {
+    fontFamily: fonts.body,
+    textAlign: 'center',
+    color: colors.secondary,
+    marginTop: 40,
+    fontSize: 14,
+  },
+  bubble: {
+    maxWidth: '78%',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+  },
+  mine: {
+    alignSelf: 'flex-end',
+    backgroundColor: colors.primary,
+    borderTopLeftRadius: 22,
+    borderTopRightRadius: 22,
+    borderBottomLeftRadius: 22,
+    borderBottomRightRadius: 6,
+  },
+  theirs: {
+    alignSelf: 'flex-start',
+    backgroundColor: colors.card,
+    borderTopLeftRadius: 22,
+    borderTopRightRadius: 22,
+    borderBottomLeftRadius: 6,
+    borderBottomRightRadius: 22,
+  },
+  mineText: {
+    fontFamily: fonts.body,
+    color: colors.onPrimary,
+    fontSize: 14.5,
+    lineHeight: 21,
+  },
+  theirsText: { fontFamily: fonts.body, color: colors.text, fontSize: 14.5, lineHeight: 21 },
+  systemPill: {
+    alignSelf: 'center',
+    backgroundColor: colors.neutralBg,
+    borderRadius: radius.pill,
+    paddingHorizontal: 14,
+    paddingVertical: 5,
+  },
+  systemText: { fontFamily: fonts.body, color: colors.secondary, fontSize: 12 },
   paymentRequest: {
     alignSelf: 'stretch',
     backgroundColor: colors.amberBg,
-    borderRadius: radius.sm,
-    padding: 12,
-    borderWidth: 1,
+    borderRadius: radius.lg,
+    padding: 15,
+    borderWidth: 1.5,
     borderColor: colors.amberBorder,
+    marginTop: 6,
   },
-  paymentRequestTitle: { fontWeight: '700', color: colors.amberText, fontSize: 13 },
-  paymentRequestBody: { color: colors.amberText, fontSize: 14, marginTop: 2 },
+  paymentRequestTitle: {
+    fontFamily: fonts.bodyBold,
+    color: colors.sunnyText,
+    fontSize: 12,
+    letterSpacing: 0.8,
+    textTransform: 'uppercase',
+  },
+  paymentRequestBody: {
+    fontFamily: fonts.body,
+    color: '#4c2900',
+    fontSize: 14,
+    marginTop: 4,
+    lineHeight: 21,
+  },
   composer: {
     flexDirection: 'row',
-    padding: 10,
-    gap: 8,
+    paddingHorizontal: 18,
+    paddingTop: 14,
+    gap: 10,
     borderTopWidth: 1,
     borderTopColor: colors.border,
-    backgroundColor: colors.card,
+    backgroundColor: colors.bg,
+    alignItems: 'center',
   },
   input: {
     flex: 1,
-    borderWidth: 1,
-    borderColor: colors.inputBorder,
-    borderRadius: 20,
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    fontSize: 15,
+    backgroundColor: colors.card,
+    borderRadius: radius.pill,
+    paddingHorizontal: 18,
+    paddingVertical: 12,
+    fontSize: 14,
+    fontFamily: fonts.body,
     maxHeight: 100,
     color: colors.text,
   },
   send: {
+    width: 46,
+    height: 46,
+    borderRadius: radius.pill,
     backgroundColor: colors.primary,
-    borderRadius: 20,
-    paddingHorizontal: 18,
+    alignItems: 'center',
     justifyContent: 'center',
   },
   sendDisabled: { backgroundColor: colors.disabled },
-  sendText: { color: colors.white, fontWeight: '600' },
 });

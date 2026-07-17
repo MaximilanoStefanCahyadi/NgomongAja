@@ -1,3 +1,4 @@
+import { Feather } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import { Link, router, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { useCallback, useState } from 'react';
@@ -14,7 +15,6 @@ import {
   TextInput,
   View,
 } from 'react-native';
-
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { useAuth } from '@/lib/auth-context';
@@ -23,7 +23,7 @@ import { formatRupiah } from '@/lib/format';
 import { listProducts, type Product } from '@/lib/products';
 import { addStorePhoto, listStorePhotos, type StorePhoto } from '@/lib/store-photos';
 import { getStore, setStoreActive, setStoreDeliveryFee, type Store } from '@/lib/stores';
-import { colors, radius, screenWrap } from '@/lib/theme';
+import { colors, fonts, radius, screenWrap } from '@/lib/theme';
 
 export default function StoreInventory() {
   const insets = useSafeAreaInsets();
@@ -33,6 +33,7 @@ export default function StoreInventory() {
   const [products, setProducts] = useState<Product[] | null>(null);
   const [photos, setPhotos] = useState<StorePhoto[]>([]);
   const [uploading, setUploading] = useState(false);
+  const [query, setQuery] = useState('');
   // PA-8: per-store delivery fee editor (null = not editing).
   const [feeDraft, setFeeDraft] = useState<string | null>(null);
 
@@ -84,7 +85,7 @@ export default function StoreInventory() {
     setStore({ ...store, is_active: value }); // optimistic: update UI first
     try {
       await setStoreActive(store.id, value);
-    } catch (e: any) {
+    } catch (e) {
       setStore({ ...store, is_active: !value }); // roll back on failure
       Alert.alert('Gagal', friendlyError(e));
     }
@@ -98,10 +99,21 @@ export default function StoreInventory() {
     );
   }
 
+  const visibleProducts =
+    query.trim().length > 0
+      ? products.filter((p) => p.name.toLowerCase().includes(query.trim().toLowerCase()))
+      : products;
+
   return (
     <View style={[styles.container, { paddingTop: insets.top + 12 }]}>
-      <Pressable onPress={() => router.back()} hitSlop={12} style={styles.backWrap}>
-        <Text style={styles.back}>‹ Toko Saya</Text>
+      <Pressable
+        onPress={() => router.back()}
+        hitSlop={12}
+        style={styles.backWrap}
+        accessibilityRole="button"
+        accessibilityLabel="Kembali">
+        <Feather name="chevron-left" size={18} color={colors.primaryDark} />
+        <Text style={styles.back}>Toko Saya</Text>
       </Pressable>
 
       <View style={styles.headerRow}>
@@ -113,6 +125,7 @@ export default function StoreInventory() {
           <Switch
             value={store.is_active}
             onValueChange={toggleOpen}
+            trackColor={{ true: colors.primary, false: colors.border }}
             accessibilityLabel="Toko buka"
           />
         </View>
@@ -122,21 +135,23 @@ export default function StoreInventory() {
         <Link
           href={{ pathname: '/(seller)/store/[id]/orders', params: { id: store.id } }}
           asChild>
-          <Pressable style={styles.navButton}>
-            <Text style={styles.navButtonText}>📋 Pesanan</Text>
+          <Pressable style={styles.navButton} accessibilityRole="button">
+            <Feather name="inbox" size={17} color={colors.primaryDeep} />
+            <Text style={styles.navButtonText}>Pesanan</Text>
           </Pressable>
         </Link>
         <Link
           href={{ pathname: '/(seller)/store/[id]/recap', params: { id: store.id } }}
           asChild>
-          <Pressable style={styles.navButton}>
-            <Text style={styles.navButtonText}>📊 Rekap</Text>
+          <Pressable style={styles.navButton} accessibilityRole="button">
+            <Feather name="bar-chart-2" size={17} color={colors.primaryDeep} />
+            <Text style={styles.navButtonText}>Rekap</Text>
           </Pressable>
         </Link>
       </View>
 
       <View style={styles.feeRow}>
-        <Text style={styles.feeLabel}>🛵 Ongkir antar:</Text>
+        <Text style={styles.feeLabel}>Ongkir antar:</Text>
         {feeDraft === null ? (
           <>
             <Text style={styles.feeValue}>{formatRupiah(store.delivery_fee)}</Text>
@@ -164,8 +179,7 @@ export default function StoreInventory() {
         )}
       </View>
 
-      <Text style={styles.sectionTitle}>Foto Toko</Text>
-      <View>
+      <View style={styles.photoSection}>
         <ScrollView
           horizontal
           showsHorizontalScrollIndicator={false}
@@ -173,55 +187,110 @@ export default function StoreInventory() {
           {photos.map((p) => (
             <Image key={p.id} source={{ uri: p.image_url }} style={styles.photo} />
           ))}
-          <Pressable style={styles.addPhoto} onPress={pickPhoto} disabled={uploading}>
+          <Pressable
+            style={styles.addPhoto}
+            onPress={pickPhoto}
+            disabled={uploading}
+            accessibilityRole="button"
+            accessibilityLabel="Tambah foto toko">
             {uploading ? (
-              <ActivityIndicator color="#16a34a" />
+              <ActivityIndicator color={colors.primary} />
             ) : (
-              <Text style={styles.addPhotoText}>＋ Tambah{'\n'}Foto</Text>
+              <>
+                <Feather name="camera" size={18} color={colors.primaryDark} />
+                <Text style={styles.addPhotoText}>Tambah{'\n'}Foto</Text>
+              </>
             )}
           </Pressable>
         </ScrollView>
       </View>
 
-      <Text style={styles.sectionTitle}>Barang ({products.length})</Text>
+      <View style={styles.listHeader}>
+        <Text style={styles.sectionTitle}>Daftar Barang</Text>
+        <Text style={styles.countTag}>{products.length} barang</Text>
+      </View>
+
+      <View style={styles.search}>
+        <Feather name="search" size={18} color={colors.secondary} />
+        <TextInput
+          style={styles.searchInput}
+          placeholder="Cari barang…"
+          placeholderTextColor={colors.secondary}
+          value={query}
+          onChangeText={setQuery}
+        />
+      </View>
+
       <FlatList
-        data={products}
+        data={visibleProducts}
         keyExtractor={(p) => p.id}
-        contentContainerStyle={{ gap: 8, paddingVertical: 8 }}
+        contentContainerStyle={{ gap: 9, paddingVertical: 12 }}
         ListEmptyComponent={
           <Text style={styles.empty}>
-            Belum ada barang. Tekan "+ Tambah Barang" — mode cepatnya dibuat untuk
-            memasukkan banyak barang berturut-turut.
+            {query
+              ? 'Tidak ada barang dengan nama itu.'
+              : 'Belum ada barang. Tekan "Tambah Barang" — mode cepatnya dibuat untuk memasukkan banyak barang berturut-turut.'}
           </Text>
         }
-        renderItem={({ item }) => (
-          <Link
-            href={{
-              pathname: '/(seller)/store/[id]/product',
-              params: { id: store.id, productId: item.id },
-            }}
-            asChild>
-            <Pressable style={styles.productRow}>
+        renderItem={({ item }) => {
+          const out = item.stock === 0;
+          return (
+            <View style={[styles.productRow, out && styles.productRowOut]}>
               <View style={{ flex: 1 }}>
                 <Text style={[styles.productName, !item.is_active && styles.inactive]}>
                   {item.name}
                 </Text>
-                <Text style={styles.productMeta}>
-                  {formatRupiah(item.price)} · stok {item.stock}
-                  {!item.is_active && ' · disembunyikan'}
-                </Text>
+                {out ? (
+                  <Text style={styles.productMetaOut}>
+                    {formatRupiah(item.price)} · Habis — isi stok?
+                  </Text>
+                ) : (
+                  <Text style={styles.productMeta}>
+                    <Text style={styles.productPrice}>{formatRupiah(item.price)}</Text> · stok{' '}
+                    {item.stock}
+                    {!item.is_active && ' · disembunyikan'}
+                  </Text>
+                )}
               </View>
-              <Text style={styles.chevron}>›</Text>
-            </Pressable>
-          </Link>
-        )}
+              {out ? (
+                <Pressable
+                  style={styles.stockBtn}
+                  accessibilityRole="button"
+                  onPress={() =>
+                    router.push({
+                      pathname: '/(seller)/store/[id]/product',
+                      params: { id: store.id, productId: item.id },
+                    })
+                  }>
+                  <Text style={styles.stockBtnText}>+ Stok</Text>
+                </Pressable>
+              ) : (
+                <Pressable
+                  style={styles.editBtn}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Ubah ${item.name}`}
+                  onPress={() =>
+                    router.push({
+                      pathname: '/(seller)/store/[id]/product',
+                      params: { id: store.id, productId: item.id },
+                    })
+                  }>
+                  <Feather name="edit-2" size={16} color={colors.body} />
+                </Pressable>
+              )}
+            </View>
+          );
+        }}
       />
 
       <Link
         href={{ pathname: '/(seller)/store/[id]/product', params: { id: store.id } }}
         asChild>
-        <Pressable style={styles.addButton}>
-          <Text style={styles.addButtonText}>+ Tambah Barang</Text>
+        <Pressable
+          style={({ pressed }) => [styles.addButton, pressed && { backgroundColor: colors.primaryDark }]}
+          accessibilityRole="button">
+          <Feather name="plus" size={20} color={colors.onPrimary} />
+          <Text style={styles.addButtonText}>Tambah Barang</Text>
         </Pressable>
       </Link>
     </View>
@@ -236,72 +305,173 @@ const styles = StyleSheet.create({
     backgroundColor: colors.bg,
   },
   container: { ...screenWrap },
-  backWrap: { alignSelf: 'flex-start', paddingVertical: 12 },
-  back: { color: colors.primary, fontSize: 16, fontWeight: '600' },
-  headerRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  title: { fontSize: 24, fontWeight: 'bold', flex: 1, marginRight: 12, color: colors.text },
+  backWrap: {
+    alignSelf: 'flex-start',
+    paddingVertical: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  back: { color: colors.primaryDark, fontSize: 15, fontFamily: fonts.bodySemi },
+  headerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginTop: 4,
+  },
+  title: {
+    fontFamily: fonts.heading,
+    fontSize: 26,
+    flex: 1,
+    marginRight: 12,
+    color: colors.text,
+  },
   toggleRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  toggleLabel: { fontSize: 13, color: colors.body },
-  sectionTitle: { fontSize: 16, fontWeight: '600', marginTop: 16, color: colors.text },
-  navRow: { flexDirection: 'row', gap: 10, marginTop: 12 },
+  toggleLabel: { fontFamily: fonts.bodySemi, fontSize: 13, color: colors.body },
+  navRow: { flexDirection: 'row', gap: 10, marginTop: 14 },
   navButton: {
     flex: 1,
-    backgroundColor: colors.primarySoft,
-    borderWidth: 2,
-    borderColor: colors.primary,
-    borderRadius: radius.md,
-    padding: 12,
+    backgroundColor: colors.primaryChipBg,
+    borderRadius: radius.pill,
+    padding: 13,
+    flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
   },
-  navButtonText: { color: colors.primaryDark, fontSize: 15, fontWeight: '600' },
-  feeRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 12 },
-  feeLabel: { fontSize: 14, color: colors.body },
-  feeValue: { fontSize: 14, fontWeight: '700', color: colors.text },
-  feeEdit: { color: colors.primary, fontSize: 14, fontWeight: '600', padding: 4 },
+  navButtonText: { color: colors.primaryDeep, fontSize: 15, fontFamily: fonts.heading },
+  feeRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 14 },
+  feeLabel: { fontFamily: fonts.body, fontSize: 14, color: colors.body },
+  feeValue: { fontFamily: fonts.bodyBold, fontSize: 14, color: colors.text },
+  feeEdit: {
+    color: colors.primaryDark,
+    fontSize: 14,
+    fontFamily: fonts.bodySemi,
+    padding: 4,
+  },
   feeInput: {
     borderWidth: 1,
     borderColor: colors.inputBorder,
-    borderRadius: radius.sm,
-    paddingHorizontal: 10,
-    paddingVertical: 4,
+    borderRadius: radius.pill,
+    paddingHorizontal: 14,
+    paddingVertical: 5,
     fontSize: 14,
+    fontFamily: fonts.body,
     minWidth: 90,
     backgroundColor: colors.card,
     color: colors.text,
   },
-  photoRow: { gap: 8, paddingVertical: 8 },
-  photo: { width: 120, height: 90, borderRadius: radius.sm, backgroundColor: colors.neutralBg },
+  photoSection: { marginTop: 12 },
+  photoRow: { gap: 8 },
+  photo: { width: 108, height: 80, borderRadius: radius.md, backgroundColor: colors.neutralBg },
   addPhoto: {
-    width: 120,
-    height: 90,
-    borderRadius: radius.sm,
+    width: 108,
+    height: 80,
+    borderRadius: radius.md,
     borderWidth: 2,
     borderColor: colors.primary,
     borderStyle: 'dashed',
     alignItems: 'center',
     justifyContent: 'center',
+    gap: 3,
     backgroundColor: colors.primarySoft,
   },
-  addPhotoText: { color: colors.primaryDark, fontSize: 14, fontWeight: '600', textAlign: 'center' },
-  empty: { color: colors.body, textAlign: 'center', marginTop: 24, lineHeight: 20 },
+  addPhotoText: {
+    color: colors.primaryDark,
+    fontSize: 11.5,
+    fontFamily: fonts.bodySemi,
+    textAlign: 'center',
+    lineHeight: 14,
+  },
+  listHeader: {
+    flexDirection: 'row',
+    alignItems: 'baseline',
+    justifyContent: 'space-between',
+    marginTop: 18,
+  },
+  sectionTitle: { fontFamily: fonts.heading, fontSize: 20, color: colors.text },
+  countTag: {
+    fontFamily: fonts.bodySemi,
+    fontSize: 12,
+    color: colors.primaryDeep,
+    backgroundColor: colors.primarySoft,
+    paddingHorizontal: 12,
+    paddingVertical: 5,
+    borderRadius: radius.pill,
+    overflow: 'hidden',
+  },
+  search: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    backgroundColor: colors.card,
+    borderRadius: radius.pill,
+    paddingHorizontal: 16,
+    paddingVertical: 4,
+    marginTop: 12,
+  },
+  searchInput: {
+    flex: 1,
+    fontSize: 14,
+    fontFamily: fonts.body,
+    color: colors.text,
+    paddingVertical: 9,
+  },
+  empty: {
+    fontFamily: fonts.body,
+    color: colors.body,
+    textAlign: 'center',
+    marginTop: 20,
+    lineHeight: 21,
+  },
   productRow: {
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: colors.card,
-    borderRadius: radius.md,
-    padding: 14,
+    borderRadius: radius.lg,
+    paddingVertical: 13,
+    paddingHorizontal: 16,
+    gap: 12,
+  },
+  productRowOut: {
+    backgroundColor: colors.amberBg,
+    borderWidth: 1.5,
+    borderColor: colors.amberBorder,
+  },
+  productName: { fontFamily: fonts.bodySemi, fontSize: 15, color: colors.text },
+  inactive: { color: colors.secondary, textDecorationLine: 'line-through' },
+  productMeta: { fontFamily: fonts.body, fontSize: 13.5, color: colors.secondary, marginTop: 2 },
+  productPrice: { fontFamily: fonts.bodyBold, color: colors.primaryDark },
+  productMetaOut: {
+    fontFamily: fonts.bodyBold,
+    fontSize: 13.5,
+    color: colors.sunnyText,
+    marginTop: 2,
+  },
+  editBtn: {
+    width: 38,
+    height: 38,
+    borderRadius: radius.pill,
     borderWidth: 1,
     borderColor: colors.border,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  productName: { fontSize: 15, fontWeight: '500', color: colors.text },
-  inactive: { color: colors.secondary, textDecorationLine: 'line-through' },
-  productMeta: { fontSize: 13, color: colors.body, marginTop: 2 },
-  chevron: { fontSize: 22, color: colors.secondary },
+  stockBtn: {
+    backgroundColor: colors.amber,
+    borderRadius: radius.pill,
+    paddingHorizontal: 16,
+    paddingVertical: 9,
+  },
+  stockBtnText: { color: '#fff', fontSize: 13.5, fontFamily: fonts.heading },
   addButton: {
     backgroundColor: colors.primary,
-    borderRadius: radius.md,
-    padding: 14,
+    borderRadius: radius.pill,
+    padding: 16,
+    flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'center',
+    gap: 9,
   },
-  addButtonText: { color: colors.white, fontSize: 16, fontWeight: '600' },
+  addButtonText: { color: colors.onPrimary, fontSize: 17, fontFamily: fonts.heading },
 });

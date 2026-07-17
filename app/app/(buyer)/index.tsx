@@ -1,5 +1,6 @@
+import { Feather } from '@expo/vector-icons';
 import * as Location from 'expo-location';
-import { Link, useFocusEffect } from 'expo-router';
+import { Link, router, useFocusEffect } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
 import {
   ActivityIndicator,
@@ -18,11 +19,16 @@ import { listFavoriteStores } from '@/lib/favorites';
 import { showLocalNotification } from '@/lib/notifications';
 import { listNearbyStores, type NearbyStore, type Store } from '@/lib/stores';
 import { supabase } from '@/lib/supabase';
-import { colors, radius, screenWrap, spacing } from '@/lib/theme';
+import { colors, fonts, radius, screenWrap, spacing } from '@/lib/theme';
 
 function formatDistance(km: number): string {
   return km < 1 ? `${Math.round(km * 1000)} m` : `${km.toFixed(1).replace('.', ',')} km`;
 }
+
+// Striped-placeholder thumbnail colors rotate per row (like the design's
+// decorative photo blocks): green, orange, warm neutral.
+const THUMB_BG = [colors.primaryChipBg, colors.amberBg, colors.neutralBg] as const;
+const THUMB_FG = [colors.primaryDeep, colors.sunnyText, colors.body] as const;
 
 export default function BuyerHome() {
   const insets = useSafeAreaInsets();
@@ -110,6 +116,12 @@ export default function BuyerHome() {
     setRefreshing(false);
   };
 
+  // The hero banner starts a voice order at the NEAREST warung.
+  const startVoiceOrder = () => {
+    if (!stores || stores.length === 0) return;
+    router.push({ pathname: '/(buyer)/store/[id]/order', params: { id: stores[0].id } });
+  };
+
   if (!stores) {
     return (
       <View style={styles.center}>
@@ -123,30 +135,46 @@ export default function BuyerHome() {
     <View style={[styles.container, { paddingTop: insets.top + 12 }]}>
       <View style={styles.headerRow}>
         <View style={{ flex: 1 }}>
+          <Text style={styles.greeting}>Halo, {profile?.full_name} 👋</Text>
           <Text style={styles.title}>Toko Terdekat</Text>
-          <Text style={styles.subtitle}>Halo, {profile?.full_name} 👋</Text>
         </View>
         <Link href="/(buyer)/orders" asChild>
           <Pressable
-            style={styles.headerBtn}
+            style={styles.iconBtn}
             accessibilityRole="button"
             accessibilityLabel="Pesanan saya">
-            <Text style={styles.headerBtnText}>📋{'\n'}Pesanan</Text>
+            <Feather name="clipboard" size={21} color={colors.text} />
           </Pressable>
         </Link>
         <Link href="/(buyer)/profile" asChild>
           <Pressable
-            style={styles.headerBtn}
+            style={styles.iconBtn}
             accessibilityRole="button"
             accessibilityLabel="Profil saya">
-            <Text style={styles.headerBtnText}>👤{'\n'}Profil</Text>
+            <Feather name="user" size={21} color={colors.text} />
           </Pressable>
         </Link>
       </View>
 
+      {stores.length > 0 && (
+        <Pressable
+          style={({ pressed }) => [styles.hero, pressed && styles.heroPressed]}
+          onPress={startVoiceOrder}
+          accessibilityRole="button"
+          accessibilityLabel="Pesan pakai suara di warung terdekat">
+          <View style={styles.heroMic}>
+            <Feather name="mic" size={27} color={colors.onPrimary} />
+          </View>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.heroTitle}>Ngomong Aja</Text>
+            <Text style={styles.heroSub}>Pesan cukup dengan bicara</Text>
+          </View>
+        </Pressable>
+      )}
+
       {favorites.length > 0 && (
         <View style={styles.favSection}>
-          <Text style={styles.favTitle}>⭐ Favoritmu</Text>
+          <Text style={styles.sectionLabel}>Favoritmu</Text>
           <View style={styles.favRow}>
             {favorites.slice(0, 6).map((f) => (
               <Link
@@ -154,6 +182,7 @@ export default function BuyerHome() {
                 href={{ pathname: '/(buyer)/store/[id]', params: { id: f.id } }}
                 asChild>
                 <Pressable style={styles.favChip} accessibilityRole="button">
+                  <Feather name="star" size={12} color={colors.sunnyText} />
                   <Text style={styles.favChipText} numberOfLines={1}>
                     {f.name}
                   </Text>
@@ -164,10 +193,11 @@ export default function BuyerHome() {
         </View>
       )}
 
+      <Text style={styles.sectionLabel}>Pilih warung</Text>
       <FlatList
         data={stores}
         keyExtractor={(s) => s.id}
-        contentContainerStyle={{ gap: 10, paddingVertical: 12 }}
+        contentContainerStyle={{ gap: 12, paddingVertical: 12 }}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
         ListEmptyComponent={
           loadFailed ? (
@@ -197,24 +227,28 @@ export default function BuyerHome() {
               </Pressable>
             </View>
           ) : (
-            <View style={styles.emptyCard}>
-              <Text style={styles.emptyCardText}>
-                🔍 Belum ada warung di dekatmu. Tarik layar ke bawah untuk cari lagi.
+            <View style={styles.emptyBox}>
+              <Text style={styles.empty}>
+                Belum ada warung di dekatmu. Tarik layar ke bawah untuk cari lagi.
               </Text>
             </View>
           )
         }
-        renderItem={({ item }) => (
+        renderItem={({ item, index }) => (
           <Link href={{ pathname: '/(buyer)/store/[id]', params: { id: item.id } }} asChild>
             <Pressable
               style={({ pressed }) => [styles.card, pressed && styles.cardPressed]}
               accessibilityRole="button"
               accessibilityLabel={`${item.name}, ${formatDistance(item.distance_km)}`}>
-              <View style={styles.storeBadge}>
-                <Text style={styles.storeBadgeEmoji}>🏪</Text>
+              <View style={[styles.thumb, { backgroundColor: THUMB_BG[index % 3] }]}>
+                <Text style={[styles.thumbInitial, { color: THUMB_FG[index % 3] }]}>
+                  {item.name.trim().charAt(0).toUpperCase()}
+                </Text>
               </View>
-              <View style={{ flex: 1 }}>
-                <Text style={styles.cardTitle}>{item.name}</Text>
+              <View style={{ flex: 1, minWidth: 0 }}>
+                <Text style={styles.cardTitle} numberOfLines={1}>
+                  {item.name}
+                </Text>
                 {!!item.description && (
                   <Text style={styles.cardDesc} numberOfLines={1}>
                     {item.description}
@@ -238,92 +272,123 @@ const styles = StyleSheet.create({
     gap: 12,
     backgroundColor: colors.bg,
   },
-  centerText: { color: colors.body },
+  centerText: { fontFamily: fonts.body, color: colors.body },
   container: { ...screenWrap },
-  headerRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
-  headerBtn: {
-    backgroundColor: colors.primarySoft,
-    borderWidth: 1,
-    borderColor: colors.primary,
-    borderRadius: radius.md,
-    paddingHorizontal: 10,
-    paddingVertical: 10,
-  },
-  headerBtnText: {
-    fontSize: 12,
-    color: colors.primaryDark,
-    textAlign: 'center',
-    fontWeight: '600',
-  },
-  favSection: { marginTop: spacing.md },
-  favTitle: { fontSize: 14, fontWeight: '700', marginBottom: 6, color: colors.text },
-  favRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
-  favChip: {
-    backgroundColor: colors.amberSoft,
-    borderWidth: 1,
-    borderColor: colors.amberSoftBorder,
-    borderRadius: radius.pill,
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    maxWidth: 160,
-  },
-  favChipText: { fontSize: 13, fontWeight: '600', color: '#854d0e' },
-  title: { fontSize: 30, fontWeight: '800', color: colors.text },
-  subtitle: { fontSize: 15, color: colors.body, marginTop: 2 },
-  empty: { color: colors.body, textAlign: 'center', marginTop: 32, lineHeight: 20 },
-  emptyCard: {
-    backgroundColor: colors.sunnyBg,
-    borderRadius: radius.lg,
-    padding: 20,
-    marginTop: 32,
-  },
-  emptyCardText: { color: colors.sunnyText, textAlign: 'center', fontSize: 16, lineHeight: 22 },
-  storeBadge: {
+  headerRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm + 2 },
+  greeting: { fontFamily: fonts.body, fontSize: 14, color: colors.secondary },
+  title: { fontFamily: fonts.heading, fontSize: 30, color: colors.text, marginTop: 4 },
+  iconBtn: {
     width: 44,
     height: 44,
-    borderRadius: 22,
-    backgroundColor: colors.primaryChipBg,
+    borderRadius: radius.pill,
+    borderWidth: 1,
+    borderColor: colors.border,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'transparent',
+  },
+  hero: {
+    marginTop: 22,
+    backgroundColor: colors.primary,
+    borderRadius: radius.xl,
+    padding: 20,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 16,
+    shadowColor: '#2e2b25',
+    shadowOpacity: 0.16,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 3 },
+    elevation: 4,
+  },
+  heroPressed: { backgroundColor: colors.primaryDark },
+  heroMic: {
+    width: 54,
+    height: 54,
+    borderRadius: radius.pill,
+    backgroundColor: 'rgba(255,255,255,.22)',
     alignItems: 'center',
     justifyContent: 'center',
   },
-  storeBadgeEmoji: { fontSize: 22 },
-  cardPressed: { backgroundColor: colors.primarySoft },
-  emptyBox: { alignItems: 'center', gap: spacing.md, paddingHorizontal: spacing.sm },
+  heroTitle: { fontFamily: fonts.heading, fontSize: 21, color: colors.onPrimary },
+  heroSub: { fontFamily: fonts.body, fontSize: 13.5, color: '#eef2e4', marginTop: 2 },
+  sectionLabel: {
+    fontFamily: fonts.bodySemi,
+    fontSize: 12.5,
+    letterSpacing: 1,
+    textTransform: 'uppercase',
+    color: colors.secondary,
+    marginTop: 26,
+  },
+  favSection: { gap: 8 },
+  favRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm, marginTop: 8 },
+  favChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: colors.amberBg,
+    borderRadius: radius.pill,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    maxWidth: 170,
+  },
+  favChipText: { fontFamily: fonts.bodySemi, fontSize: 13, color: colors.sunnyText },
+  empty: {
+    fontFamily: fonts.body,
+    color: colors.body,
+    textAlign: 'center',
+    marginTop: 8,
+    lineHeight: 21,
+    fontSize: 14.5,
+  },
+  emptyBox: { alignItems: 'center', gap: spacing.md, padding: spacing.lg },
   emptyButton: {
     backgroundColor: colors.primary,
-    borderRadius: radius.md,
-    paddingVertical: 12,
-    paddingHorizontal: 24,
+    borderRadius: radius.pill,
+    paddingVertical: 13,
+    paddingHorizontal: 26,
     marginTop: spacing.xs,
   },
-  emptyButtonText: { color: colors.white, fontSize: 15, fontWeight: '600' },
+  emptyButtonText: { color: colors.onPrimary, fontSize: 15, fontFamily: fonts.heading },
   emptyOutlineButton: {
-    backgroundColor: colors.primarySoft,
     borderWidth: 2,
-    borderColor: colors.primary,
-    borderRadius: radius.md,
+    borderColor: colors.border,
+    borderRadius: radius.pill,
     paddingVertical: 12,
-    paddingHorizontal: 24,
+    paddingHorizontal: 26,
   },
-  emptyOutlineButtonText: { color: colors.primaryDark, fontSize: 15, fontWeight: '600' },
+  emptyOutlineButtonText: { color: colors.body, fontSize: 15, fontFamily: fonts.heading },
   card: {
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: colors.card,
     borderRadius: radius.lg,
-    padding: 16,
-    borderWidth: 1,
-    borderColor: colors.border,
-    gap: 12,
+    paddingVertical: 16,
+    paddingHorizontal: 18,
+    gap: 14,
   },
-  cardTitle: { fontSize: 18, fontWeight: '700', color: colors.text },
-  cardDesc: { fontSize: 15, color: colors.body, marginTop: 2 },
+  cardPressed: { backgroundColor: colors.neutralBg },
+  thumb: {
+    width: 52,
+    height: 52,
+    borderRadius: radius.md,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  thumbInitial: { fontFamily: fonts.heading, fontSize: 22 },
+  cardTitle: { fontFamily: fonts.heading, fontSize: 18, color: colors.text },
+  cardDesc: {
+    fontFamily: fonts.body,
+    fontSize: 12.5,
+    color: colors.secondary,
+    marginTop: 2,
+  },
   distance: {
-    fontSize: 14,
-    fontWeight: '700',
+    fontFamily: fonts.bodyBold,
+    fontSize: 12.5,
     color: colors.primaryDeep,
     backgroundColor: colors.primaryChipBg,
-    paddingHorizontal: 10,
+    paddingHorizontal: 12,
     paddingVertical: 5,
     borderRadius: radius.pill,
     overflow: 'hidden',

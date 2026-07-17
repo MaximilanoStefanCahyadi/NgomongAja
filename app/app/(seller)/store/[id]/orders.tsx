@@ -1,7 +1,9 @@
+import { Feather } from '@expo/vector-icons';
 import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { useCallback, useState } from 'react';
 import {
   ActivityIndicator,
+  Alert,
   FlatList,
   Pressable,
   ScrollView,
@@ -11,27 +13,45 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { friendlyError } from '@/lib/errors';
 import { formatRupiah } from '@/lib/format';
-import { expireStaleOrders, listStoreOrders, type OrderRow } from '@/lib/orders';
+import {
+  expireStaleOrders,
+  listStoreOrders,
+  updateOrderStatus,
+  type OrderRow,
+} from '@/lib/orders';
 import { PAYMENT_BADGE, STATUS_CHIP } from '@/lib/status-ui';
-import { colors, radius, screenWrap } from '@/lib/theme';
+import { colors, fonts, radius, screenWrap } from '@/lib/theme';
 
 // Filter chips (PRD S-2). "Semua" shows everything, including rejected/cancelled.
 type FilterKey = 'all' | 'pending' | 'accepted' | 'ready' | 'completed';
 
 const FILTERS: { key: FilterKey; label: string }[] = [
   { key: 'all', label: 'Semua' },
-  { key: 'pending', label: 'Menunggu' },
+  { key: 'pending', label: 'Baru' },
   { key: 'accepted', label: 'Diproses' },
   { key: 'ready', label: 'Siap' },
-  { key: 'completed', label: 'Selesai' },
+  { key: 'completed', label: 'Riwayat' },
 ];
 
 function formatTime(iso: string): string {
+  const diffMin = Math.round((Date.now() - new Date(iso).getTime()) / 60000);
+  if (diffMin < 1) return 'baru saja';
+  if (diffMin < 60) return `${diffMin} menit lalu`;
   const d = new Date(iso);
   const date = d.toLocaleDateString('id-ID', { day: 'numeric', month: 'short' });
   const time = d.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' });
   return `${date}, ${time}`;
+}
+
+function itemsSummary(o: OrderRow): string {
+  return (o.order_items ?? [])
+    .map(
+      (it) =>
+        `${it.products?.name ?? 'Barang'} × ${String(it.quantity).replace('.', ',')}`
+    )
+    .join(' · ');
 }
 
 export default function StoreOrders() {
@@ -39,18 +59,36 @@ export default function StoreOrders() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const [orders, setOrders] = useState<OrderRow[] | null>(null);
   const [filter, setFilter] = useState<FilterKey>('all');
+  const [busyId, setBusyId] = useState<string | null>(null);
+
+  const load = useCallback(async () => {
+    if (!id) return;
+    // Check-on-read expiry (AS-12) before showing the list.
+    await expireStaleOrders();
+    setOrders(await listStoreOrders(id));
+  }, [id]);
 
   useFocusEffect(
     useCallback(() => {
-      if (!id) return;
-      (async () => {
-        // Check-on-read expiry (AS-12) before showing the list.
-        await expireStaleOrders();
-        setOrders(await listStoreOrders(id));
-      })().catch((e) => console.warn('listStoreOrders:', e.message));
-    }, [id])
+      load().catch((e) => console.warn('listStoreOrders:', e.message));
+    }, [load])
   );
 
+  // Inline accept straight from the card (per the design) — one tap while
+  // standing at the counter. Reject needs a reason, so it opens the detail.
+  const acceptInline = async (orderId: string) => {
+    setBusyId(orderId);
+    try {
+      await updateOrderStatus(orderId, 'accepted');
+      await load();
+    } catch (e) {
+      Alert.alert('Gagal', friendlyError(e));
+    } finally {
+      setBusyId(null);
+    }
+  };
+
+  const pendingCount = orders?.filter((o) => o.status === 'pending').length ?? 0;
   const visible = orders?.filter((o) => filter === 'all' || o.status === filter) ?? null;
 
   if (!visible) {
@@ -63,25 +101,34 @@ export default function StoreOrders() {
 
   return (
     <View style={[styles.container, { paddingTop: insets.top + 12 }]}>
-      <Pressable onPress={() => router.back()} hitSlop={12} style={styles.backWrap}>
-        <Text style={styles.back}>‹ Toko</Text>
+      <Pressable
+        onPress={() => router.back()}
+        hitSlop={12}
+        style={styles.backWrap}
+        accessibilityRole="button"
+        accessibilityLabel="Kembali">
+        <Feather name="chevron-left" size={18} color={colors.primaryDark} />
+        <Text style={styles.back}>Toko</Text>
       </Pressable>
-      <Text style={styles.title}>Pesanan Masuk 📋</Text>
+      <Text style={styles.title}>Pesanan</Text>
 
       <View>
         <ScrollView
           horizontal
           showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.chipRow}>
+          style={styles.segScroll}
+          contentContainerStyle={styles.seg}>
           {FILTERS.map((f) => (
             <Pressable
               key={f.key}
-              style={[styles.chip, filter === f.key && styles.chipActive]}
+              style={[styles.segOpt, filter === f.key && styles.segOptOn]}
               onPress={() => setFilter(f.key)}
               accessibilityRole="button"
               accessibilityState={{ selected: filter === f.key }}>
-              <Text style={[styles.chipText, filter === f.key && styles.chipTextActive]}>
-                {f.label}
+              <Text style={[styles.segText, filter === f.key && styles.segTextOn]}>
+                {f.key === 'pending' && pendingCount > 0
+                  ? `${f.label} (${pendingCount})`
+                  : f.label}
               </Text>
             </Pressable>
           ))}
@@ -91,7 +138,7 @@ export default function StoreOrders() {
       <FlatList
         data={visible}
         keyExtractor={(o) => o.id}
-        contentContainerStyle={{ gap: 10, paddingVertical: 12 }}
+        contentContainerStyle={{ gap: 12, paddingVertical: 16 }}
         ListEmptyComponent={
           <Text style={styles.empty}>
             {filter === 'all'
@@ -102,6 +149,7 @@ export default function StoreOrders() {
         renderItem={({ item: o }) => {
           const status = STATUS_CHIP[o.status];
           const pay = o.payments[0] ? PAYMENT_BADGE[o.payments[0].status] : null;
+          const summary = itemsSummary(o);
           return (
             <Pressable
               style={styles.card}
@@ -118,22 +166,58 @@ export default function StoreOrders() {
                 </Text>
                 <Text style={styles.time}>{formatTime(o.created_at)}</Text>
               </View>
+              {!!summary && (
+                <Text style={styles.summary} numberOfLines={2}>
+                  {summary}
+                </Text>
+              )}
               <View style={styles.cardMid}>
                 <Text style={styles.total}>{formatRupiah(o.total)}</Text>
-                <Text style={styles.fulfillment}>
-                  {o.fulfillment === 'delivery' ? '🛵 Diantar' : '🏪 Ambil sendiri'}
+                <Text style={styles.fulfillTag}>
+                  {o.fulfillment === 'delivery' ? 'Diantar' : 'Ambil sendiri'}
                 </Text>
               </View>
-              <View style={styles.badgeRow}>
-                <View style={[styles.badge, { backgroundColor: status.bg }]}>
-                  <Text style={[styles.badgeText, { color: status.fg }]}>{status.label}</Text>
+              {o.status === 'pending' ? (
+                <View style={styles.actionRow}>
+                  <Pressable
+                    style={styles.rejectBtn}
+                    disabled={busyId === o.id}
+                    accessibilityRole="button"
+                    onPress={() =>
+                      router.push({
+                        pathname: '/(seller)/order/[orderId]',
+                        params: { orderId: o.id },
+                      })
+                    }>
+                    <Text style={styles.rejectText}>Tolak</Text>
+                  </Pressable>
+                  <Pressable
+                    style={({ pressed }) => [
+                      styles.acceptBtn,
+                      pressed && { backgroundColor: colors.primaryDark },
+                    ]}
+                    disabled={busyId === o.id}
+                    accessibilityRole="button"
+                    onPress={() => acceptInline(o.id)}>
+                    {busyId === o.id ? (
+                      <ActivityIndicator size="small" color={colors.onPrimary} />
+                    ) : (
+                      <Text style={styles.acceptText}>Terima Pesanan</Text>
+                    )}
+                  </Pressable>
                 </View>
-                {pay && (
-                  <View style={[styles.badge, { backgroundColor: pay.bg }]}>
-                    <Text style={[styles.badgeText, { color: pay.fg }]}>{pay.label}</Text>
-                  </View>
-                )}
-              </View>
+              ) : (
+                <View style={styles.badgeRow}>
+                  <Text style={[styles.tag, { backgroundColor: status.bg, color: status.fg }]}>
+                    {status.label}
+                  </Text>
+                  {pay && (
+                    <Text style={[styles.tag, { backgroundColor: pay.bg, color: pay.fg }]}>
+                      {pay.label}
+                    </Text>
+                  )}
+                </View>
+              )}
             </Pressable>
           );
         }}
@@ -150,37 +234,96 @@ const styles = StyleSheet.create({
     backgroundColor: colors.bg,
   },
   container: { ...screenWrap },
-  backWrap: { alignSelf: 'flex-start', paddingVertical: 12 },
-  back: { color: colors.primary, fontSize: 16, fontWeight: '600' },
-  title: { fontSize: 24, fontWeight: 'bold', marginBottom: 12, color: colors.text },
-  chipRow: { gap: 8 },
-  chip: {
-    paddingHorizontal: 14,
+  backWrap: {
+    alignSelf: 'flex-start',
     paddingVertical: 12,
-    borderRadius: radius.pill,
-    backgroundColor: colors.card,
-    borderWidth: 1,
-    borderColor: colors.border,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
   },
-  chipActive: { backgroundColor: colors.primary, borderColor: colors.primary },
-  chipText: { fontSize: 14, color: colors.body },
-  chipTextActive: { color: colors.white, fontWeight: '600' },
-  empty: { color: colors.body, textAlign: 'center', marginTop: 32, lineHeight: 20 },
+  back: { color: colors.primaryDark, fontSize: 15, fontFamily: fonts.bodySemi },
+  title: { fontFamily: fonts.heading, fontSize: 28, color: colors.text, marginTop: 6 },
+  segScroll: { flexGrow: 0, marginTop: 14 },
+  seg: {
+    flexDirection: 'row',
+    backgroundColor: colors.card,
+    borderRadius: radius.pill,
+    padding: 3,
+  },
+  segOpt: {
+    paddingHorizontal: 16,
+    paddingVertical: 9,
+    borderRadius: radius.pill,
+  },
+  segOptOn: { backgroundColor: colors.primary },
+  segText: { fontFamily: fonts.bodySemi, fontSize: 13.5, color: colors.body },
+  segTextOn: { color: colors.onPrimary },
+  empty: {
+    fontFamily: fonts.body,
+    color: colors.body,
+    textAlign: 'center',
+    marginTop: 32,
+    lineHeight: 21,
+  },
   card: {
     backgroundColor: colors.card,
-    borderRadius: radius.md,
-    padding: 14,
-    borderWidth: 1,
-    borderColor: colors.border,
-    gap: 8,
+    borderRadius: radius.lg,
+    padding: 18,
+    gap: 10,
+    shadowColor: '#2e2b25',
+    shadowOpacity: 0.08,
+    shadowRadius: 4,
+    shadowOffset: { width: 0, height: 1 },
+    elevation: 1,
   },
   cardTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  buyerName: { fontSize: 15, fontWeight: '600', flex: 1, marginRight: 8, color: colors.text },
-  time: { fontSize: 12, color: colors.secondary },
+  buyerName: {
+    fontFamily: fonts.heading,
+    fontSize: 18,
+    flex: 1,
+    marginRight: 8,
+    color: colors.text,
+  },
+  time: { fontFamily: fonts.body, fontSize: 12, color: colors.secondary },
+  summary: { fontFamily: fonts.body, fontSize: 14, lineHeight: 21, color: colors.body },
   cardMid: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  total: { fontSize: 16, fontWeight: 'bold', color: colors.primaryDark },
-  fulfillment: { fontSize: 13, color: colors.body },
+  total: { fontFamily: fonts.heading, fontSize: 17, color: colors.primaryDark },
+  fulfillTag: {
+    fontFamily: fonts.body,
+    fontSize: 12,
+    color: colors.body,
+    backgroundColor: colors.neutralBg,
+    paddingHorizontal: 12,
+    paddingVertical: 5,
+    borderRadius: radius.pill,
+    overflow: 'hidden',
+  },
+  actionRow: { flexDirection: 'row', gap: 10, marginTop: 4 },
+  rejectBtn: {
+    flex: 1,
+    borderWidth: 2,
+    borderColor: colors.border,
+    borderRadius: radius.pill,
+    padding: 11,
+    alignItems: 'center',
+  },
+  rejectText: { fontFamily: fonts.heading, fontSize: 15, color: colors.body },
+  acceptBtn: {
+    flex: 2,
+    backgroundColor: colors.primary,
+    borderRadius: radius.pill,
+    padding: 11,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  acceptText: { fontFamily: fonts.heading, fontSize: 15, color: colors.onPrimary },
   badgeRow: { flexDirection: 'row', gap: 6 },
-  badge: { borderRadius: radius.md, paddingHorizontal: 10, paddingVertical: 3 },
-  badgeText: { fontSize: 12, fontWeight: '600' },
+  tag: {
+    fontFamily: fonts.bodySemi,
+    fontSize: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 5,
+    borderRadius: radius.pill,
+    overflow: 'hidden',
+  },
 });

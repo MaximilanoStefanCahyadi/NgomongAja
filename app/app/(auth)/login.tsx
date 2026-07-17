@@ -1,3 +1,4 @@
+import { Feather } from '@expo/vector-icons';
 import { Link, router } from 'expo-router';
 import { useState } from 'react';
 import {
@@ -12,7 +13,7 @@ import {
 
 import { friendlyError } from '@/lib/errors';
 import { supabase } from '@/lib/supabase';
-import { colors, radius, spacing } from '@/lib/theme';
+import { colors, fonts, radius, spacing } from '@/lib/theme';
 
 export default function Login() {
   const [email, setEmail] = useState('');
@@ -42,13 +43,19 @@ export default function Login() {
 
   return (
     <View style={styles.container}>
-      <Text style={styles.title}>NgomongAja</Text>
-      <Text style={styles.subtitle}>Belanja di warung, cukup ngomong aja. 🛒</Text>
+      <View style={styles.brand}>
+        <View style={styles.logoCircle}>
+          <Feather name="mic" size={40} color={colors.onPrimary} />
+        </View>
+        <Text style={styles.title}>NgomongAja</Text>
+        <Text style={styles.subtitle}>Belanja di warung, cukup ngomong aja.</Text>
+      </View>
 
       <Text style={styles.label}>Email</Text>
       <TextInput
         style={styles.input}
         placeholder="Email"
+        placeholderTextColor={colors.secondary}
         autoCapitalize="none"
         keyboardType="email-address"
         value={email}
@@ -58,14 +65,19 @@ export default function Login() {
       <TextInput
         style={styles.input}
         placeholder="Kata sandi"
+        placeholderTextColor={colors.secondary}
         secureTextEntry
         value={password}
         onChangeText={setPassword}
       />
 
-      <Pressable style={styles.button} onPress={handleLogin} disabled={submitting}>
+      <Pressable
+        style={({ pressed }) => [styles.button, pressed && styles.buttonPressed]}
+        onPress={handleLogin}
+        disabled={submitting}
+        accessibilityRole="button">
         {submitting ? (
-          <ActivityIndicator color="#fff" />
+          <ActivityIndicator color={colors.onPrimary} />
         ) : (
           <Text style={styles.buttonText}>Masuk</Text>
         )}
@@ -73,7 +85,9 @@ export default function Login() {
 
       <Link href="/(auth)/register" asChild>
         <Pressable hitSlop={12} style={styles.linkWrap} accessibilityRole="link">
-          <Text style={styles.link}>Belum punya akun? Daftar di sini</Text>
+          <Text style={styles.linkMuted}>
+            Belum punya akun? <Text style={styles.link}>Daftar di sini</Text>
+          </Text>
         </Pressable>
       </Link>
     </View>
@@ -84,35 +98,55 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     justifyContent: 'center',
-    padding: spacing.xl,
-    gap: spacing.sm,
+    padding: 28,
+    gap: spacing.md,
     backgroundColor: colors.bg,
   },
-  title: { fontSize: 32, fontWeight: 'bold', textAlign: 'center', color: colors.text },
-  subtitle: {
-    fontSize: 14,
-    textAlign: 'center',
-    color: colors.body,
-    marginBottom: spacing.xl,
+  brand: { alignItems: 'center', gap: 14, marginBottom: 18 },
+  logoCircle: {
+    width: 88,
+    height: 88,
+    borderRadius: radius.pill,
+    backgroundColor: colors.primary,
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#2e2b25',
+    shadowOpacity: 0.16,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 3 },
+    elevation: 4,
   },
-  label: { fontSize: 13, fontWeight: '700', color: colors.body, marginTop: spacing.xs },
+  title: { fontFamily: fonts.heading, fontSize: 34, color: colors.text },
+  subtitle: {
+    fontFamily: fonts.body,
+    fontSize: 14.5,
+    textAlign: 'center',
+    color: colors.secondary,
+    lineHeight: 22,
+  },
+  label: { fontFamily: fonts.body, fontSize: 12, color: colors.body, marginTop: spacing.xs },
   input: {
+    minHeight: 46,
     borderWidth: 1,
-    borderColor: colors.inputBorder,
-    borderRadius: radius.md,
-    padding: 12,
-    fontSize: 16,
+    borderColor: colors.border,
+    borderRadius: radius.pill,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    fontSize: 15,
+    fontFamily: fonts.body,
     backgroundColor: colors.card,
     color: colors.text,
   },
   button: {
     backgroundColor: colors.primary,
-    borderRadius: radius.md,
-    padding: 14,
+    borderRadius: radius.pill,
+    padding: 15,
     alignItems: 'center',
     marginTop: spacing.sm,
   },
-  buttonText: { color: colors.white, fontSize: 16, fontWeight: '600' },
+  buttonPressed: { backgroundColor: colors.primaryDark },
+  buttonText: { color: colors.onPrimary, fontSize: 17, fontFamily: fonts.heading },
   linkWrap: { alignSelf: 'center', paddingVertical: 12, marginTop: spacing.xs },
-  link: { textAlign: 'center', color: colors.primary, fontSize: 14, fontWeight: '600' },
+  linkMuted: { fontFamily: fonts.body, color: colors.secondary, fontSize: 14 },
+  link: { color: colors.primaryDark, fontFamily: fonts.bodyBold },
 });

@@ -1,3 +1,4 @@
+import { Feather } from '@expo/vector-icons';
 import { Link, router, useFocusEffect } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
 import {
@@ -16,7 +17,10 @@ import { showLocalNotification } from '@/lib/notifications';
 import { countPendingForOwner, expireStaleOrders } from '@/lib/orders';
 import { listMyStores, type Store } from '@/lib/stores';
 import { supabase } from '@/lib/supabase';
-import { colors, radius, screenWrap, spacing } from '@/lib/theme';
+import { colors, fonts, radius, screenWrap } from '@/lib/theme';
+
+const THUMB_BG = [colors.primaryChipBg, colors.amberBg, colors.neutralBg] as const;
+const THUMB_FG = [colors.primaryDeep, colors.sunnyText, colors.body] as const;
 
 export default function SellerHome() {
   const insets = useSafeAreaInsets();
@@ -87,49 +91,61 @@ export default function SellerHome() {
 
   return (
     <View style={[styles.container, { paddingTop: insets.top + 12 }]}>
-      <Text style={styles.title}>Toko Saya 🏪</Text>
-      <Text style={styles.subtitle}>Halo, {profile?.full_name} 👋</Text>
+      <Text style={styles.greeting}>Halo, {profile?.full_name} 👋</Text>
+      <Text style={styles.title}>Toko Saya</Text>
+
       {pendingCount > 0 && (
         <Pressable
-          style={styles.pendingBanner}
+          style={({ pressed }) => [styles.pendingBanner, pressed && { opacity: 0.9 }]}
           onPress={openPendingOrders}
           accessibilityRole="button"
-          accessibilityLabel={`${pendingCount} pesanan menunggu, ketuk untuk lihat`}>
-          <Text style={styles.pendingBannerText}>
-            🔔 {pendingCount} pesanan baru menunggu — ketuk untuk lihat
-          </Text>
+          accessibilityLabel={`${pendingCount} pesanan menunggu, ketuk untuk lihat`}
+          accessibilityLiveRegion="polite">
+          <View style={styles.bellCircle}>
+            <Feather name="bell" size={22} color="#fff" />
+          </View>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.pendingTitle}>
+              {pendingCount} pesanan menunggu
+            </Text>
+            <Text style={styles.pendingSub}>Ketuk untuk konfirmasi sekarang</Text>
+          </View>
+          <Feather name="chevron-right" size={20} color="#fff" />
         </Pressable>
       )}
 
+      <Text style={styles.sectionLabel}>Toko kamu</Text>
       <FlatList
         data={stores}
         keyExtractor={(s) => s.id}
-        contentContainerStyle={{ gap: 10, paddingVertical: 12 }}
+        contentContainerStyle={{ gap: 12, paddingVertical: 12 }}
         ListEmptyComponent={
           <View style={styles.emptyCard}>
             <Text style={styles.emptyCardText}>
-              🏪 Belum ada toko. Yuk buat toko pertamamu!
+              Belum ada toko. Yuk buat toko pertamamu!
             </Text>
           </View>
         }
-        renderItem={({ item }) => (
+        renderItem={({ item, index }) => (
           <Link href={{ pathname: '/(seller)/store/[id]', params: { id: item.id } }} asChild>
             <Pressable
               style={({ pressed }) => [styles.card, pressed && styles.cardPressed]}
               accessibilityRole="button">
-              <View style={styles.storeBadge}>
-                <Text style={styles.storeBadgeEmoji}>🏪</Text>
+              <View style={[styles.thumb, { backgroundColor: THUMB_BG[index % 3] }]}>
+                <Text style={[styles.thumbInitial, { color: THUMB_FG[index % 3] }]}>
+                  {item.name.trim().charAt(0).toUpperCase()}
+                </Text>
               </View>
-              <View style={{ flex: 1 }}>
-                <Text style={styles.cardTitle}>{item.name}</Text>
-                {!!item.description && (
-                  <Text style={styles.cardDesc} numberOfLines={1}>
-                    {item.description}
-                  </Text>
-                )}
+              <View style={{ flex: 1, minWidth: 0 }}>
+                <Text style={styles.cardTitle} numberOfLines={1}>
+                  {item.name}
+                </Text>
+                <Text style={styles.cardDesc} numberOfLines={1}>
+                  {item.description || 'Ketuk untuk kelola toko'}
+                </Text>
               </View>
-              <Text style={[styles.badge, item.is_active ? styles.open : styles.closed]}>
-                {item.is_active ? '🟢 Buka' : '🔴 Tutup'}
+              <Text style={[styles.tag, item.is_active ? styles.tagOpen : styles.tagClosed]}>
+                {item.is_active ? 'Buka' : 'Tutup'}
               </Text>
             </Pressable>
           </Link>
@@ -137,8 +153,11 @@ export default function SellerHome() {
       />
 
       <Link href="/(seller)/store/new" asChild>
-        <Pressable style={styles.addButton} accessibilityRole="button">
-          <Text style={styles.addButtonText}>+ Tambah Toko</Text>
+        <Pressable
+          style={({ pressed }) => [styles.addButton, pressed && { backgroundColor: colors.primaryDark }]}
+          accessibilityRole="button">
+          <Feather name="plus" size={20} color={colors.onPrimary} />
+          <Text style={styles.addButtonText}>Tambah Toko</Text>
         </Pressable>
       </Link>
 
@@ -161,64 +180,103 @@ const styles = StyleSheet.create({
     backgroundColor: colors.bg,
   },
   container: { ...screenWrap },
-  title: { fontSize: 30, fontWeight: '800', color: colors.text },
-  subtitle: { fontSize: 15, color: colors.body, marginTop: 2 },
-  emptyCard: {
-    backgroundColor: colors.sunnyBg,
+  greeting: { fontFamily: fonts.body, fontSize: 14, color: colors.secondary },
+  title: { fontFamily: fonts.heading, fontSize: 30, color: colors.text, marginTop: 4 },
+  pendingBanner: {
+    marginTop: 20,
+    backgroundColor: colors.amber,
     borderRadius: radius.lg,
-    padding: 20,
-    marginTop: 32,
+    padding: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 14,
+    shadowColor: '#2e2b25',
+    shadowOpacity: 0.16,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 3 },
+    elevation: 4,
   },
-  emptyCardText: { color: colors.sunnyText, textAlign: 'center', fontSize: 16, lineHeight: 22 },
-  storeBadge: {
+  bellCircle: {
     width: 44,
     height: 44,
-    borderRadius: 22,
-    backgroundColor: colors.primaryChipBg,
+    borderRadius: radius.pill,
+    backgroundColor: 'rgba(255,255,255,.24)',
     alignItems: 'center',
     justifyContent: 'center',
   },
-  storeBadgeEmoji: { fontSize: 22 },
-  cardPressed: { backgroundColor: colors.primarySoft },
-  pendingBanner: {
-    backgroundColor: colors.amberBg,
-    borderRadius: radius.md,
-    padding: 12,
-    marginTop: 10,
-    borderWidth: 1,
-    borderColor: colors.amberBorder,
+  pendingTitle: { fontFamily: fonts.heading, fontSize: 18, color: '#fff' },
+  pendingSub: {
+    fontFamily: fonts.body,
+    fontSize: 13,
+    color: 'rgba(255,255,255,.9)',
+    marginTop: 2,
   },
-  pendingBannerText: { color: colors.amberText, fontSize: 14, fontWeight: '600' },
-  empty: { color: colors.body, textAlign: 'center', marginTop: 32, lineHeight: 20 },
+  sectionLabel: {
+    fontFamily: fonts.bodySemi,
+    fontSize: 12.5,
+    letterSpacing: 1,
+    textTransform: 'uppercase',
+    color: colors.secondary,
+    marginTop: 24,
+  },
+  emptyCard: {
+    backgroundColor: colors.amberBg,
+    borderRadius: radius.lg,
+    padding: 20,
+    marginTop: 12,
+  },
+  emptyCardText: {
+    fontFamily: fonts.body,
+    color: colors.sunnyText,
+    textAlign: 'center',
+    fontSize: 15,
+    lineHeight: 22,
+  },
   card: {
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: colors.card,
-    borderRadius: radius.sm,
-    padding: 16,
-    borderWidth: 1,
-    borderColor: colors.border,
-    gap: 12,
+    borderRadius: radius.lg,
+    paddingVertical: 16,
+    paddingHorizontal: 18,
+    gap: 14,
   },
-  cardTitle: { fontSize: 18, fontWeight: '700', color: colors.text },
-  cardDesc: { fontSize: 15, color: colors.body, marginTop: 2 },
-  badge: {
+  cardPressed: { backgroundColor: colors.neutralBg },
+  thumb: {
+    width: 52,
+    height: 52,
+    borderRadius: radius.md,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  thumbInitial: { fontFamily: fonts.heading, fontSize: 22 },
+  cardTitle: { fontFamily: fonts.heading, fontSize: 18, color: colors.text },
+  cardDesc: {
+    fontFamily: fonts.body,
+    fontSize: 12.5,
+    color: colors.secondary,
+    marginTop: 2,
+  },
+  tag: {
+    fontFamily: fonts.bodySemi,
     fontSize: 12,
-    fontWeight: '600',
-    paddingHorizontal: 10,
-    paddingVertical: 4,
+    paddingHorizontal: 12,
+    paddingVertical: 5,
     borderRadius: radius.pill,
     overflow: 'hidden',
   },
-  open: { backgroundColor: colors.primaryChipBg, color: colors.primaryDark },
-  closed: { backgroundColor: colors.dangerBg, color: colors.dangerDark },
+  tagOpen: { backgroundColor: colors.primarySoft, color: colors.primaryDeep },
+  tagClosed: { backgroundColor: colors.amberBg, color: colors.sunnyText },
   addButton: {
     backgroundColor: colors.primary,
-    borderRadius: radius.md,
-    padding: 14,
+    borderRadius: radius.pill,
+    padding: 16,
+    flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'center',
+    gap: 9,
   },
-  addButtonText: { color: colors.white, fontSize: 16, fontWeight: '600' },
-  signOutWrap: { alignSelf: 'center', paddingVertical: 12, marginTop: spacing.md },
-  signOut: { textAlign: 'center', color: colors.danger, fontSize: 14 },
+  addButtonText: { color: colors.onPrimary, fontSize: 17, fontFamily: fonts.heading },
+  signOutWrap: { alignSelf: 'center', paddingVertical: 14 },
+  signOut: { fontFamily: fonts.bodySemi, color: colors.sunnyText, fontSize: 14 },
 });
