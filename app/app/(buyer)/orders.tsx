@@ -1,21 +1,13 @@
 import { router, useFocusEffect } from 'expo-router';
 import { useCallback, useState } from 'react';
-import {
-  ActivityIndicator,
-  FlatList,
-  Pressable,
-  RefreshControl,
-  StyleSheet,
-  Text,
-  View,
-} from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { FlatList, RefreshControl, StyleSheet, View } from 'react-native';
 
+import { Card, ListState, Row, Screen, ScreenHeader, Tag, Text } from '@/components/ui';
 import { useAuth } from '@/lib/auth-context';
 import { formatRupiah } from '@/lib/format';
 import { expireStaleOrders, listMyOrders, type OrderRow } from '@/lib/orders';
 import { PAYMENT_BADGE, STATUS_CHIP } from '@/lib/status-ui';
-import { colors, fonts, radius, screenWrap, spacing } from '@/lib/theme';
+import { spacing } from '@/lib/theme';
 
 // "2026-07-15T…" -> "15 Jul 2026"
 function formatDate(iso: string): string {
@@ -27,7 +19,6 @@ function formatDate(iso: string): string {
 }
 
 export default function MyOrders() {
-  const insets = useSafeAreaInsets();
   const { profile } = useAuth();
   const [orders, setOrders] = useState<OrderRow[] | null>(null);
   const [loadFailed, setLoadFailed] = useState(false);
@@ -68,44 +59,37 @@ export default function MyOrders() {
 
   if (!orders) {
     return (
-      <View style={styles.center}>
-        <ActivityIndicator size="large" color={colors.primary} />
-      </View>
+      <Screen centered>
+        <ListState state="loading" message="Memuat pesananmu…" />
+      </Screen>
     );
   }
 
   return (
-    <View style={[styles.container, { paddingTop: insets.top + 12 }]}>
-      <Pressable onPress={() => router.back()} hitSlop={12} style={styles.backWrap}>
-        <Text style={styles.back}>‹ Beranda</Text>
-      </Pressable>
-      <Text style={styles.title}>Pesanan Saya</Text>
+    <Screen>
+      <ScreenHeader title="Pesanan Saya" backLabel="Beranda" />
 
       <FlatList
         data={orders}
         keyExtractor={(o) => o.id}
-        contentContainerStyle={{ gap: 10, paddingVertical: 12 }}
+        contentContainerStyle={styles.list}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
         ListEmptyComponent={
           loadFailed ? (
-            <View style={styles.emptyBox}>
-              <Text style={styles.empty}>Gagal memuat. Periksa internetmu.</Text>
-              <Pressable style={styles.emptyButton} onPress={retry} accessibilityRole="button">
-                <Text style={styles.emptyButtonText}>Coba Lagi</Text>
-              </Pressable>
-            </View>
+            <ListState
+              state="error"
+              title="Gagal memuat"
+              message="Periksa koneksi internetmu, lalu coba lagi."
+              action={{ label: 'Coba Lagi', onPress: retry }}
+            />
           ) : (
-            <View style={styles.emptyBox}>
-              <Text style={styles.empty}>
-                🧾 Belum ada pesanan. Yuk pesan dari warung terdekat!
-              </Text>
-              <Pressable
-                style={styles.emptyButton}
-                onPress={() => router.back()}
-                accessibilityRole="button">
-                <Text style={styles.emptyButtonText}>Cari Warung</Text>
-              </Pressable>
-            </View>
+            <ListState
+              state="empty"
+              icon="file-text"
+              title="Belum ada pesanan"
+              message="Pesananmu akan muncul di sini. Yuk pesan dari warung terdekat!"
+              action={{ label: 'Cari Warung', onPress: () => router.back() }}
+            />
           )
         }
         renderItem={({ item: o }) => {
@@ -113,94 +97,41 @@ export default function MyOrders() {
           const payment = o.payments[0];
           const payBadge = payment ? PAYMENT_BADGE[payment.status] : null;
           return (
-            <Pressable
-              style={styles.card}
+            <Card
+              padding="sm"
+              gap={spacing.xs}
+              accessibilityLabel={`${o.stores?.name ?? 'Toko'}, ${chip.label}, ${formatRupiah(o.total)}`}
               onPress={() =>
                 router.push({
                   pathname: '/(buyer)/order/[orderId]',
                   params: { orderId: o.id },
                 })
               }>
-              <View style={styles.cardHeader}>
-                <Text style={styles.storeName} numberOfLines={1}>
-                  {o.stores?.name ?? 'Toko'}
+              <Row
+                title={o.stores?.name ?? 'Toko'}
+                meta={formatDate(o.created_at)}
+                trailing={<Tag label={chip.label} tone={chip.tone} />}
+              />
+              <View style={styles.footer}>
+                <Text variant="money" color="text">
+                  {formatRupiah(o.total)}
                 </Text>
-                <Text style={[styles.chip, { backgroundColor: chip.bg, color: chip.fg }]}>
-                  {chip.label}
-                </Text>
+                {payBadge && <Tag label={payBadge.label} tone={payBadge.tone} />}
               </View>
-              <Text style={styles.date}>{formatDate(o.created_at)}</Text>
-              <View style={styles.cardFooter}>
-                <Text style={styles.total}>{formatRupiah(o.total)}</Text>
-                {payBadge && (
-                  <Text
-                    style={[
-                      styles.payBadge,
-                      { backgroundColor: payBadge.bg, color: payBadge.fg },
-                    ]}>
-                    {payBadge.label}
-                  </Text>
-                )}
-              </View>
-            </Pressable>
+            </Card>
           );
         }}
       />
-    </View>
+    </Screen>
   );
 }
 
 const styles = StyleSheet.create({
-  center: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: colors.bg,
-  },
-  container: { ...screenWrap },
-  backWrap: { alignSelf: 'flex-start', paddingVertical: 12 },
-  back: { color: colors.primary, fontSize: 16, fontWeight: '600' },
-  title: { fontSize: 30, fontFamily: fonts.heading, color: colors.text },
-  empty: { color: colors.body, textAlign: 'center', marginTop: 32, lineHeight: 20 },
-  emptyBox: { alignItems: 'center', gap: spacing.md },
-  emptyButton: {
-    backgroundColor: colors.primary,
-    borderRadius: radius.md,
-    paddingVertical: 12,
-    paddingHorizontal: 24,
-  },
-  emptyButtonText: { color: colors.onPrimary, fontSize: 15, fontWeight: '600' },
-  card: {
-    backgroundColor: colors.card,
-    borderRadius: radius.lg,
-    padding: 16,
-    borderWidth: 1,
-    borderColor: colors.border,
-    gap: 6,
-  },
-  cardHeader: { flexDirection: 'row', justifyContent: 'space-between', gap: spacing.sm },
-  storeName: { fontSize: 16, fontFamily: fonts.bodySemi, flex: 1, color: colors.text },
-  chip: {
-    fontSize: 12,
-    fontFamily: fonts.bodySemi,
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: radius.pill,
-    overflow: 'hidden',
-  },
-  date: { fontSize: 13, color: colors.body },
-  cardFooter: {
+  list: { gap: spacing.sm, paddingVertical: spacing.md, paddingBottom: spacing.xl },
+  footer: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'center',
-  },
-  total: { fontSize: 15, fontFamily: fonts.heading, color: colors.primaryDark },
-  payBadge: {
-    fontSize: 12,
-    fontFamily: fonts.bodySemi,
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: radius.pill,
-    overflow: 'hidden',
+    justifyContent: 'space-between',
+    gap: spacing.sm,
   },
 });

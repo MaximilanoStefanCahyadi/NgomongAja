@@ -1,19 +1,22 @@
+import { Feather } from '@expo/vector-icons';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useMemo, useState } from 'react';
-import {
-  ActivityIndicator,
-  Alert,
-  KeyboardAvoidingView,
-  Platform,
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  View,
-} from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { Alert, Pressable, StyleSheet, View } from 'react-native';
 
+import {
+  Button,
+  Card,
+  Field,
+  IconButton,
+  ListState,
+  Row,
+  Screen,
+  ScreenHeader,
+  SectionLabel,
+  SegmentedControl,
+  Tag,
+  Text,
+} from '@/components/ui';
 import { createAddress, listAddresses, type Address } from '@/lib/addresses';
 import { useAuth } from '@/lib/auth-context';
 import { friendlyError } from '@/lib/errors';
@@ -30,7 +33,7 @@ import {
 import { listActiveProducts, type Product } from '@/lib/products';
 import { PAYMENT_METHOD_LABEL } from '@/lib/status-ui';
 import { getStore, type Store } from '@/lib/stores';
-import { colors, fonts, radius, scrollWrap, spacing } from '@/lib/theme';
+import { colors, layout, radius, spacing } from '@/lib/theme';
 
 type Line = {
   key: string;
@@ -45,7 +48,6 @@ type Line = {
 type Phase = 'review' | 'placing' | 'pay' | 'success';
 
 export default function ReviewOrder() {
-  const insets = useSafeAreaInsets();
   const { id: storeId } = useLocalSearchParams<{ id: string }>();
   const { profile } = useAuth();
   const draft = useMemo(() => getOrderDraft(), []);
@@ -94,12 +96,14 @@ export default function ReviewOrder() {
   if (!draft || !storeId) {
     // Deep link / reload without a draft: nothing to review.
     return (
-      <View style={styles.center}>
-        <Text style={styles.hint}>Tidak ada pesanan untuk diperiksa.</Text>
-        <Pressable style={styles.button} onPress={() => router.back()}>
-          <Text style={styles.buttonText}>Kembali</Text>
-        </Pressable>
-      </View>
+      <Screen centered>
+        <ListState
+          state="empty"
+          icon="shopping-cart"
+          message="Tidak ada pesanan untuk diperiksa."
+          action={{ label: 'Kembali', onPress: () => router.back() }}
+        />
+      </Screen>
     );
   }
 
@@ -111,7 +115,9 @@ export default function ReviewOrder() {
   const fmtQty = (q: number) => String(q).replace('.', ',');
 
   const resolved = lines.filter((l) => l.product !== null);
-  const unresolved = lines.length - resolved.length;
+  const unresolvedAmbiguous = lines.filter(
+    (l) => l.product === null && l.candidates.length > 0
+  ).length;
   const itemsTotal = resolved.reduce(
     (sum, l) => sum + Math.round(l.product!.price * l.quantity),
     0
@@ -125,12 +131,12 @@ export default function ReviewOrder() {
   const showNewAddressForm = addresses.length === 0 || writingNewAddress;
   const needsAddress = fulfillment === 'delivery' && !addressId && !newAddress.trim();
   const canConfirm =
-    lines.length > 0 && unresolved === 0 && !needsAddress && phase === 'review';
+    lines.length > 0 && unresolvedAmbiguous === 0 && !needsAddress && phase === 'review';
 
   // The disabled button explains itself instead of just being grey.
   const confirmLabel =
-    unresolved > 0
-      ? `Pilih dulu ${unresolved} barang di atas`
+    unresolvedAmbiguous > 0
+      ? `Pilih dulu ${unresolvedAmbiguous} barang di atas`
       : needsAddress
         ? 'Pilih alamat dulu'
         : 'Kirim Pesanan';
@@ -193,468 +199,385 @@ export default function ReviewOrder() {
 
   if (phase === 'pay') {
     return (
-      <View style={styles.center}>
-        <Text style={styles.demoBanner}>DEMO — tidak ada uang berpindah</Text>
-        <Text style={styles.title}>{PAYMENT_METHOD_LABEL[method]}</Text>
-        <Text style={styles.payAmount}>{formatRupiah(total)}</Text>
-        <Pressable style={styles.button} onPress={payNow}>
-          <Text style={styles.buttonText}>
-            Bayar Sekarang (coba-coba, uang tidak berpindah)
-          </Text>
-        </Pressable>
-        <Pressable onPress={() => setPhase('success')} hitSlop={12} style={styles.linkWrap}>
-          <Text style={styles.linkText}>Bayar nanti</Text>
-        </Pressable>
-      </View>
+      <Screen centered>
+        <Tag tone="warn" label="DEMO — tidak ada uang berpindah" />
+        <Text variant="title" align="center">
+          {PAYMENT_METHOD_LABEL[method]}
+        </Text>
+        {/* The one big number on this stage. */}
+        <Text variant="displayXl" align="center">
+          {formatRupiah(total)}
+        </Text>
+        <Button
+          label="Bayar Sekarang"
+          onPress={payNow}
+          fullWidth={false}
+          accessibilityHint="Coba-coba saja — uang tidak berpindah"
+        />
+        <Button
+          label="Bayar nanti"
+          variant="quiet"
+          size="md"
+          fullWidth={false}
+          onPress={() => setPhase('success')}
+        />
+      </Screen>
     );
   }
 
   if (phase === 'success') {
     return (
-      <View style={styles.center}>
-        <Text style={styles.successEmoji}>🎉</Text>
-        <Text style={styles.title}>Hore, pesanan terkirim!</Text>
-        <Text style={styles.hint}>
-          Selamat, belanjamu beres tanpa antre! 🥳{'\n'}
-          Pesananmu menunggu konfirmasi penjual.{'\n'}Total {formatRupiah(total)} ·{' '}
-          {PAYMENT_METHOD_LABEL[method]}
+      <Screen centered>
+        <View style={styles.successIcon}>
+          <Feather name="check" size={36} color={colors.successInk} />
+        </View>
+        <Text variant="display" align="center" accessibilityRole="header">
+          Hore, pesanan terkirim!
         </Text>
-        <Pressable style={styles.button} onPress={() => router.dismissAll()}>
-          <Text style={styles.buttonText}>Kembali ke Beranda</Text>
-        </Pressable>
-      </View>
+        <Text variant="body" color="body" align="center">
+          Selamat, belanjamu beres tanpa antre! 🥳{'\n'}
+          Pesananmu menunggu konfirmasi penjual.
+        </Text>
+        <Text variant="money" align="center">
+          Total {formatRupiah(total)} · {PAYMENT_METHOD_LABEL[method]}
+        </Text>
+        <Button label="Kembali ke Beranda" onPress={() => router.dismissAll()} fullWidth={false} />
+      </Screen>
     );
   }
 
   return (
-    <KeyboardAvoidingView
-      style={{ flex: 1, backgroundColor: colors.bg }}
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-      <ScrollView
-        style={{ backgroundColor: colors.bg }}
-        contentContainerStyle={[styles.container, { paddingTop: insets.top + 12 }]}
-        keyboardShouldPersistTaps="handled">
-        <Pressable onPress={() => router.back()} hitSlop={12} style={styles.backWrap}>
-          <Text style={styles.back}>‹ Kembali ke {storeInfo?.name ?? 'Toko'}</Text>
-        </Pressable>
-        <Text style={styles.title}>Periksa Pesanan</Text>
-        {!!storeInfo?.name && <Text style={styles.storeName}>🏪 {storeInfo.name}</Text>}
-        <Text style={styles.transcript}>"{draft.transcript}"</Text>
+    <Screen
+      scroll
+      keyboard
+      contentContainerStyle={styles.content}
+      footer={
+        <Button
+          label={confirmLabel}
+          onPress={confirm}
+          disabled={!canConfirm}
+          loading={phase === 'placing'}
+        />
+      }>
+      <ScreenHeader
+        title="Periksa Pesanan"
+        backLabel={`Kembali ke ${storeInfo?.name ?? 'Toko'}`}
+      />
 
-        {lines.map((line) => (
-          <View key={line.key} style={styles.lineCard}>
-            {line.product ? (
-              <>
+      {!!storeInfo?.name && (
+        <View style={styles.storeRow}>
+          <Feather name="shopping-bag" size={16} color={colors.primaryInk} />
+          <Text variant="label" color="primary" numberOfLines={1} style={styles.flex}>
+            {storeInfo.name}
+          </Text>
+        </View>
+      )}
+
+      {/* Same treatment as the "Yang kami dengar" stage this screen follows. */}
+      <Card tone="success" row style={styles.transcript}>
+        <Feather name="mic" size={18} color={colors.successInk} style={styles.transcriptIcon} />
+        <Text variant="transcript" color="success" style={styles.transcriptText}>
+          &quot;{draft.transcript}&quot;
+        </Text>
+      </Card>
+
+      <SectionLabel first>Barang</SectionLabel>
+
+      <View style={styles.lines}>
+        {lines.map((line) => {
+          const product = line.product;
+
+          if (product) {
+            return (
+              <Card key={line.key} padding="sm" gap={spacing.sm}>
                 <View style={styles.lineHeader}>
-                  <Text style={styles.lineName}>{line.product.name}</Text>
-                  <Pressable
+                  <Text variant="bodyStrong" style={styles.flex} numberOfLines={2}>
+                    {product.name}
+                  </Text>
+                  <IconButton
+                    icon="x"
+                    tone="danger"
                     onPress={() => removeLine(line.key)}
-                    style={styles.remove}
-                    accessibilityRole="button"
-                    accessibilityLabel={`Hapus ${line.product.name}`}>
-                    <Text style={styles.removeText}>✕</Text>
-                  </Pressable>
+                    accessibilityLabel={`Hapus ${product.name}`}
+                  />
                 </View>
                 <View style={styles.lineControls}>
-                  <Pressable
-                    style={styles.stepBtn}
-                    accessibilityRole="button"
+                  <IconButton
+                    icon="minus"
                     accessibilityLabel="Kurangi jumlah"
                     onPress={() =>
                       updateLine(line.key, {
                         quantity: Math.max(step(line.unit), line.quantity - step(line.unit)),
                       })
-                    }>
-                    <Text style={styles.stepBtnText}>−</Text>
-                  </Pressable>
-                  <Text style={styles.qty}>
+                    }
+                  />
+                  <Text variant="bodyStrong" align="center" style={styles.qty}>
                     {fmtQty(line.quantity)} {line.unit !== 'default' ? line.unit : ''}
                   </Text>
-                  <Pressable
-                    style={styles.stepBtn}
-                    accessibilityRole="button"
+                  <IconButton
+                    icon="plus"
                     accessibilityLabel="Tambah jumlah"
                     onPress={() =>
                       updateLine(line.key, { quantity: line.quantity + step(line.unit) })
-                    }>
-                    <Text style={styles.stepBtnText}>+</Text>
-                  </Pressable>
-                  <Text style={styles.lineSubtotal}>
-                    {formatRupiah(Math.round(line.product.price * line.quantity))}
+                    }
+                  />
+                  <Text variant="money" style={styles.lineSubtotal}>
+                    {formatRupiah(Math.round(product.price * line.quantity))}
                   </Text>
                 </View>
-              </>
-            ) : (
-              <>
-                <View style={styles.lineHeader}>
-                  <Text style={styles.lineName}>
-                    {line.candidates.length > 0 ? '🤔' : '❓'} "{line.spokenName}" ×{' '}
-                    {fmtQty(line.quantity)}
-                  </Text>
-                  <Pressable
-                    onPress={() => removeLine(line.key)}
-                    style={styles.remove}
-                    accessibilityRole="button"
-                    accessibilityLabel={`Hapus ${line.spokenName}`}>
-                    <Text style={styles.removeText}>✕</Text>
-                  </Pressable>
-                </View>
-                {line.candidates.length > 0 ? (
-                  <View style={styles.candidates}>
-                    <Text style={styles.hintSmall}>Maksud kamu yang mana?</Text>
-                    {line.candidates.map((c) => (
-                      <Pressable
-                        key={c.id}
-                        style={styles.candidate}
-                        onPress={() => updateLine(line.key, { product: c })}>
-                        <Text style={styles.candidateText}>
-                          {c.name} · {formatRupiah(c.price)}
-                        </Text>
-                      </Pressable>
-                    ))}
-                  </View>
-                ) : (
-                  <View style={styles.candidates}>
-                    <TextInput
-                      style={styles.search}
-                      placeholder="Cari produk di toko ini…"
-                      value={line.query}
-                      onChangeText={(q) => updateLine(line.key, { query: q })}
-                    />
-                    {line.query.length >= 2 &&
-                      allProducts
-                        .filter((p) =>
-                          p.name.toLowerCase().includes(line.query.toLowerCase())
-                        )
-                        .slice(0, 5)
-                        .map((p) => (
-                          <Pressable
-                            key={p.id}
-                            style={styles.candidate}
-                            onPress={() => updateLine(line.key, { product: p, query: '' })}>
-                            <Text style={styles.candidateText}>
-                              {p.name} · {formatRupiah(p.price)}
-                            </Text>
-                          </Pressable>
-                        ))}
-                  </View>
-                )}
-              </>
-            )}
-          </View>
-        ))}
+              </Card>
+            );
+          }
 
-        <Text style={styles.sectionTitle}>Cara terima</Text>
-        <View style={styles.seg}>
-          <Pressable
-            style={[styles.segOpt, fulfillment === 'pickup' && styles.segOptOn]}
-            onPress={() => setFulfillment('pickup')}
-            accessibilityRole="button"
-            accessibilityState={{ selected: fulfillment === 'pickup' }}>
-            <Text style={[styles.segText, fulfillment === 'pickup' && styles.segTextOn]}>
-              Ambil Sendiri
-            </Text>
-          </Pressable>
-          <Pressable
-            style={[styles.segOpt, fulfillment === 'delivery' && styles.segOptOn]}
-            onPress={() => setFulfillment('delivery')}
-            accessibilityRole="button"
-            accessibilityState={{ selected: fulfillment === 'delivery' }}>
-            <Text style={[styles.segText, fulfillment === 'delivery' && styles.segTextOn]}>
-              Diantar (+{formatRupiah(storeFee)})
-            </Text>
-          </Pressable>
-        </View>
-
-        {fulfillment === 'delivery' && (
-          <View style={styles.addressBox}>
-            <Text style={styles.hintSmall}>Antar ke:</Text>
-            {addresses.map((a) => (
-              <Pressable
-                key={a.id}
-                style={[styles.choice, addressId === a.id && styles.choiceSelected]}
-                accessibilityRole="button"
-                accessibilityState={{ selected: addressId === a.id }}
-                onPress={() => {
-                  setAddressId(a.id);
-                  setNewAddress('');
-                  setWritingNewAddress(false);
-                }}>
-                <Text style={styles.choiceText}>
-                  {a.label ? `${a.label} — ` : ''}
-                  {a.full_address}
+          // Unresolved. The amber Tag + icon is the ONE "you must act" signal —
+          // the card itself stays neutral so the tag is actually visible on it.
+          const ambiguous = line.candidates.length > 0;
+          return (
+            <Card key={line.key} padding="sm" gap={spacing.sm}>
+              <View style={styles.lineHeader}>
+                <Feather
+                  name={ambiguous ? 'help-circle' : 'search'}
+                  size={18}
+                  color={colors.warnInk}
+                />
+                <Text variant="bodyStrong" style={styles.flex} numberOfLines={2}>
+                  &quot;{line.spokenName}&quot; × {fmtQty(line.quantity)}
                 </Text>
-              </Pressable>
-            ))}
-            {!showNewAddressForm ? (
-              <Pressable
-                style={styles.newAddressToggle}
-                onPress={() => setWritingNewAddress(true)}
-                accessibilityRole="button">
-                <Text style={styles.newAddressToggleText}>+ Tulis alamat baru</Text>
-              </Pressable>
-            ) : (
-              <>
-                <TextInput
-                  style={styles.search}
-                  placeholder="Label alamat baru (contoh: Rumah)"
-                  value={newLabel}
-                  onChangeText={setNewLabel}
+                <IconButton
+                  icon="x"
+                  tone="danger"
+                  onPress={() => removeLine(line.key)}
+                  accessibilityLabel={`Hapus ${line.spokenName}`}
                 />
-                <TextInput
-                  style={[styles.search, { minHeight: 60 }]}
-                  placeholder="Tulis alamat baru lengkap di sini…"
-                  multiline
-                  value={newAddress}
-                  onChangeText={(t) => {
-                    setNewAddress(t);
-                    if (t.trim()) setAddressId(null);
-                  }}
-                />
-              </>
-            )}
-          </View>
-        )}
+              </View>
 
-        <Text style={styles.sectionTitle}>Pembayaran</Text>
-        <Text style={styles.demoBanner}>DEMO — tidak ada uang berpindah</Text>
-        <View style={styles.radioGroup}>
-          {(Object.keys(PAYMENT_METHOD_LABEL) as PaymentMethod[]).map((m) => (
+              <Tag tone="warn" label={ambiguous ? 'Pilih dulu' : 'Tidak ketemu'} />
+
+              {ambiguous ? (
+                <View style={styles.choices}>
+                  <Text variant="label" color="body">
+                    Maksud kamu yang mana?
+                  </Text>
+                  {line.candidates.map((c) => (
+                    <Pressable
+                      key={c.id}
+                      style={[styles.choice, styles.onCard]}
+                      accessibilityRole="button"
+                      accessibilityLabel={`${c.name}, ${formatRupiah(c.price)}`}
+                      onPress={() => updateLine(line.key, { product: c })}>
+                      <Text variant="bodyStrong" style={styles.flex} numberOfLines={2}>
+                        {c.name}
+                      </Text>
+                      <Text variant="money">{formatRupiah(c.price)}</Text>
+                    </Pressable>
+                  ))}
+                </View>
+              ) : (
+                <View style={styles.choices}>
+                  <Text variant="meta" color="secondary">
+                    {`Tidak ditemukan: "${line.spokenName}"`}
+                  </Text>
+                  <Field
+                    placeholder="Cari produk di toko ini…"
+                    leftIcon="search"
+                    accessibilityLabel={`Cari pengganti untuk ${line.spokenName}`}
+                    value={line.query}
+                    onChangeText={(q) => updateLine(line.key, { query: q })}
+                  />
+                  {line.query.length >= 2 &&
+                    allProducts
+                      .filter((p) => p.name.toLowerCase().includes(line.query.toLowerCase()))
+                      .slice(0, 5)
+                      .map((p) => (
+                        <Pressable
+                          key={p.id}
+                          style={[styles.choice, styles.onCard]}
+                          accessibilityRole="button"
+                          accessibilityLabel={`${p.name}, ${formatRupiah(p.price)}`}
+                          onPress={() => updateLine(line.key, { product: p, query: '' })}>
+                          <Text variant="bodyStrong" style={styles.flex} numberOfLines={2}>
+                            {p.name}
+                          </Text>
+                          <Text variant="money">{formatRupiah(p.price)}</Text>
+                        </Pressable>
+                      ))}
+                </View>
+              )}
+            </Card>
+          );
+        })}
+      </View>
+
+      <SectionLabel>Cara terima</SectionLabel>
+      <SegmentedControl<Fulfillment>
+        options={[
+          { key: 'pickup', label: 'Ambil Sendiri' },
+          { key: 'delivery', label: `Diantar (+${formatRupiah(storeFee)})` },
+        ]}
+        value={fulfillment}
+        onChange={setFulfillment}
+      />
+
+      {fulfillment === 'delivery' && (
+        <View style={styles.addressBox}>
+          <Text variant="label" color="body">
+            Antar ke:
+          </Text>
+          <View accessibilityRole="radiogroup" style={styles.choices}>
+            {addresses.map((a) => {
+              const selected = addressId === a.id;
+              return (
+                <Pressable
+                  key={a.id}
+                  // ONE signal for "selected": the green fill, plus a check icon
+                  // so the state never rests on colour alone.
+                  style={[styles.choice, styles.onPaper, selected && styles.choiceOn]}
+                  accessibilityRole="radio"
+                  accessibilityState={{ checked: selected }}
+                  accessibilityLabel={`${a.label ? a.label + ' — ' : ''}${a.full_address}`}
+                  onPress={() => {
+                    setAddressId(a.id);
+                    setNewAddress('');
+                    setWritingNewAddress(false);
+                  }}>
+                  <View style={styles.choiceText}>
+                    <Text variant="bodyStrong" color={selected ? 'primaryInk' : 'text'}>
+                      {a.label ?? a.full_address}
+                    </Text>
+                    {!!a.label && (
+                      <Text variant="meta" color={selected ? 'primaryInk' : 'secondary'}>
+                        {a.full_address}
+                      </Text>
+                    )}
+                  </View>
+                  {selected && <Feather name="check" size={20} color={colors.primaryInk} />}
+                </Pressable>
+              );
+            })}
+          </View>
+
+          {!showNewAddressForm ? (
+            <Button
+              label="Tulis alamat baru"
+              variant="secondary"
+              size="md"
+              icon="plus"
+              fullWidth={false}
+              onPress={() => setWritingNewAddress(true)}
+            />
+          ) : (
+            <>
+              <Field
+                label="Label alamat baru"
+                placeholder="Contoh: Rumah"
+                value={newLabel}
+                onChangeText={setNewLabel}
+              />
+              <Field
+                label="Alamat lengkap"
+                placeholder="Tulis alamat baru lengkap di sini…"
+                multiline
+                hint={needsAddress ? 'Alamat wajib diisi untuk pesanan yang diantar.' : undefined}
+                value={newAddress}
+                onChangeText={(t) => {
+                  setNewAddress(t);
+                  if (t.trim()) setAddressId(null);
+                }}
+              />
+            </>
+          )}
+        </View>
+      )}
+
+      <SectionLabel>Pembayaran</SectionLabel>
+      <Tag tone="warn" label="DEMO — tidak ada uang berpindah" />
+      <View accessibilityRole="radiogroup" style={styles.methods}>
+        {(Object.keys(PAYMENT_METHOD_LABEL) as PaymentMethod[]).map((m) => {
+          const selected = method === m;
+          return (
             <Pressable
               key={m}
-              style={styles.radioRow}
+              style={[styles.choice, styles.onPaper, selected && styles.choiceOn]}
               onPress={() => setMethod(m)}
               accessibilityRole="radio"
-              accessibilityState={{ selected: method === m }}>
-              <View style={[styles.radioDot, method === m && styles.radioDotOn]} />
-              <Text style={styles.radioLabel}>{PAYMENT_METHOD_LABEL[m]}</Text>
+              accessibilityState={{ checked: selected }}
+              accessibilityLabel={PAYMENT_METHOD_LABEL[m]}>
+              <Text
+                variant="bodyStrong"
+                color={selected ? 'primaryInk' : 'text'}
+                style={styles.flex}>
+                {PAYMENT_METHOD_LABEL[m]}
+              </Text>
+              {selected && <Feather name="check" size={20} color={colors.primaryInk} />}
             </Pressable>
-          ))}
-        </View>
+          );
+        })}
+      </View>
 
-        <View style={styles.totals}>
-          <View style={styles.totalLine}>
-            <Text style={styles.totalRow}>Barang</Text>
-            <Text style={styles.totalRow}>{formatRupiah(itemsTotal)}</Text>
-          </View>
-          <View style={styles.totalLine}>
-            <Text style={styles.totalRow}>Ongkir</Text>
-            <Text style={styles.totalRow}>{formatRupiah(fee)}</Text>
-          </View>
-          <View style={[styles.totalLine, { marginTop: 6 }]}>
-            <Text style={styles.grandTotal}>Total</Text>
-            <Text style={styles.grandTotal}>{formatRupiah(grandTotal)}</Text>
-          </View>
-        </View>
+      <Card style={styles.totals}>
+        <Row title="Barang" value={formatRupiah(itemsTotal)} />
+        <Row title="Ongkir" value={formatRupiah(fee)} />
+        <Row title="Total" value={formatRupiah(grandTotal)} emphasis="total" />
+      </Card>
 
-        {unresolved > 0 && (
-          <Text style={styles.warn}>
-            ⚠️ {unresolved} barang belum dipilih — pilih produknya atau hapus dulu.
+      {unresolvedAmbiguous > 0 && (
+        // The warn fill + left rule is the whole "needs attention" signal.
+        <Card tone="warn" row style={styles.notice}>
+          <Feather name="alert-triangle" size={18} color={colors.warnInk} />
+          <Text variant="body" color="body" style={styles.flex}>
+            {unresolvedAmbiguous} barang perlu dipilih dulu — pilih produknya atau hapus.
           </Text>
-        )}
-
-        <Pressable
-          style={[styles.button, !canConfirm && styles.buttonDisabled]}
-          onPress={confirm}
-          disabled={!canConfirm}>
-          {phase === 'placing' ? (
-            <ActivityIndicator color="#fff" />
-          ) : (
-            <Text style={styles.buttonText}>{confirmLabel}</Text>
-          )}
-        </Pressable>
-      </ScrollView>
-    </KeyboardAvoidingView>
+        </Card>
+      )}
+      {unresolvedAmbiguous === 0 && lines.some((l) => l.product === null) && (
+        <Text variant="meta" color="secondary" style={styles.notice}>
+          Barang yang tidak ditemukan akan dilewati kalau tidak kamu pilih atau hapus.
+        </Text>
+      )}
+    </Screen>
   );
 }
 
+// Screen-specific layout only — every control above comes from the kit.
 const styles = StyleSheet.create({
-  center: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    gap: 16,
-    padding: spacing.xl,
-    backgroundColor: colors.bg,
-  },
-  container: { ...scrollWrap, gap: 10 },
-  backWrap: { alignSelf: 'flex-start', paddingVertical: 12 },
-  back: { color: colors.primaryDark, fontSize: 15, fontFamily: fonts.bodySemi },
-  title: { fontFamily: fonts.heading, fontSize: 28, color: colors.text },
-  storeName: { fontFamily: fonts.bodySemi, fontSize: 14.5, color: colors.primaryDark },
-  transcript: {
-    fontFamily: fonts.body,
-    fontSize: 14,
-    fontStyle: 'italic',
-    color: colors.body,
-    marginBottom: 6,
-  },
-  hint: {
-    fontFamily: fonts.body,
-    fontSize: 15,
-    color: colors.body,
-    textAlign: 'center',
-    lineHeight: 23,
-  },
-  hintSmall: { fontFamily: fonts.body, fontSize: 13, color: colors.secondary },
-  successEmoji: { fontSize: 72 },
-  lineCard: {
-    backgroundColor: colors.card,
-    borderRadius: radius.lg,
-    padding: 14,
-    gap: 10,
-  },
-  lineHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    gap: spacing.sm,
-  },
-  lineName: { fontFamily: fonts.bodySemi, fontSize: 15, flex: 1, color: colors.text },
-  remove: {
-    width: 44,
-    height: 44,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  removeText: { fontSize: 18, color: colors.danger },
-  lineControls: { flexDirection: 'row', alignItems: 'center', gap: 12 },
-  stepBtn: {
-    width: 40,
-    height: 40,
-    borderRadius: radius.pill,
-    backgroundColor: colors.neutralBg,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  stepBtnText: { fontFamily: fonts.bodyBold, fontSize: 18, color: colors.primaryDeep },
-  qty: {
-    fontFamily: fonts.bodyBold,
-    fontSize: 15,
-    minWidth: 56,
-    textAlign: 'center',
-    color: colors.text,
-  },
-  lineSubtotal: {
-    marginLeft: 'auto',
-    fontFamily: fonts.bodyBold,
-    fontSize: 15,
-    color: colors.primaryDark,
-  },
-  candidates: { gap: 6 },
-  candidate: {
-    borderRadius: radius.pill,
-    paddingVertical: 12,
-    paddingHorizontal: 16,
-    backgroundColor: colors.bg,
-  },
-  candidateText: { fontFamily: fonts.bodySemi, fontSize: 14, color: colors.text },
-  search: {
-    borderWidth: 1,
-    borderColor: colors.inputBorder,
-    borderRadius: radius.pill,
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    fontSize: 14,
-    fontFamily: fonts.body,
-    backgroundColor: colors.bg,
-    color: colors.text,
-  },
-  sectionTitle: {
-    fontFamily: fonts.bodySemi,
-    fontSize: 12.5,
-    letterSpacing: 1,
-    textTransform: 'uppercase',
-    color: colors.secondary,
-    marginTop: 16,
-  },
-  seg: {
-    flexDirection: 'row',
-    alignSelf: 'flex-start',
-    backgroundColor: colors.card,
-    borderRadius: radius.pill,
-    padding: 3,
-  },
-  segOpt: {
-    paddingHorizontal: 18,
-    paddingVertical: 10,
-    borderRadius: radius.pill,
-  },
-  segOptOn: { backgroundColor: colors.primary },
-  segText: { fontFamily: fonts.bodySemi, fontSize: 14, color: colors.body },
-  segTextOn: { color: colors.onPrimary },
-  radioGroup: { gap: 4 },
-  radioRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-    paddingVertical: 9,
-  },
-  radioDot: {
-    width: 18,
-    height: 18,
-    borderRadius: radius.pill,
-    borderWidth: 1.5,
-    borderColor: colors.inputBorder,
-    backgroundColor: colors.bg,
-  },
-  radioDotOn: { borderWidth: 5.5, borderColor: colors.primary },
-  radioLabel: { fontFamily: fonts.body, fontSize: 14.5, color: colors.text },
+  content: { paddingBottom: spacing.xl },
+  flex: { flex: 1 },
+  storeRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
+  transcript: { marginTop: spacing.md, alignItems: 'flex-start' },
+  transcriptIcon: { marginTop: 3 },
+  transcriptText: { flex: 1, fontStyle: 'italic' },
+  lines: { gap: spacing.sm },
+  lineHeader: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  lineControls: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  qty: { minWidth: 64 },
+  lineSubtotal: { marginLeft: 'auto' },
+  choices: { gap: spacing.sm },
   choice: {
-    borderWidth: 2,
-    borderColor: 'transparent',
-    borderRadius: radius.lg,
-    padding: 13,
-    backgroundColor: colors.card,
-  },
-  choiceSelected: { borderColor: colors.primary, backgroundColor: colors.primarySoft },
-  choiceText: { fontFamily: fonts.bodySemi, fontSize: 14, color: colors.text },
-  addressBox: { gap: spacing.sm },
-  newAddressToggle: {
-    borderWidth: 2,
-    borderColor: colors.primary,
-    borderStyle: 'dashed',
-    borderRadius: radius.pill,
-    padding: 12,
+    flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: colors.primarySoft,
+    gap: spacing.md,
+    minHeight: layout.minTouch,
+    borderRadius: radius.sm,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
   },
-  newAddressToggleText: {
-    color: colors.primaryDark,
-    fontSize: 14,
-    fontFamily: fonts.bodySemi,
-  },
-  demoBanner: {
-    alignSelf: 'flex-start',
-    fontFamily: fonts.bodyBold,
-    fontSize: 11.5,
-    color: colors.amberText,
-    backgroundColor: colors.amberBg,
-    paddingHorizontal: 12,
-    paddingVertical: 5,
+  /** Choices sitting on paper take the card fill… */
+  onPaper: { backgroundColor: colors.card },
+  /** …and choices nested inside a card invert to paper, so they still read. */
+  onCard: { backgroundColor: colors.bg },
+  choiceOn: { backgroundColor: colors.primarySoft },
+  choiceText: { flex: 1, gap: 2 },
+  addressBox: { gap: spacing.sm, marginTop: spacing.sm },
+  methods: { gap: spacing.sm, marginTop: spacing.sm },
+  totals: { marginTop: spacing.xl },
+  notice: { marginTop: spacing.md },
+  successIcon: {
+    width: 72,
+    height: 72,
     borderRadius: radius.pill,
-    overflow: 'hidden',
-  },
-  totals: { marginTop: 14, gap: 4, paddingHorizontal: 4 },
-  totalLine: { flexDirection: 'row', justifyContent: 'space-between' },
-  totalRow: { fontFamily: fonts.body, fontSize: 14, color: colors.body },
-  grandTotal: { fontFamily: fonts.heading, fontSize: 20, color: colors.text },
-  payAmount: { fontFamily: fonts.heading, fontSize: 38, color: colors.text },
-  warn: { fontFamily: fonts.bodySemi, color: colors.sunnyText, fontSize: 15 },
-  button: {
-    backgroundColor: colors.primary,
-    borderRadius: radius.pill,
-    padding: 16,
+    // Toska aktif is the success hue — orange here would read as a CTA.
+    backgroundColor: colors.successBg,
     alignItems: 'center',
-    marginTop: spacing.sm,
+    justifyContent: 'center',
   },
-  buttonDisabled: { backgroundColor: colors.disabled },
-  buttonText: {
-    color: colors.onPrimary,
-    fontSize: 17,
-    fontFamily: fonts.heading,
-    textAlign: 'center',
-  },
-  linkWrap: { paddingVertical: 12 },
-  linkText: { fontFamily: fonts.body, color: colors.body, fontSize: 14 },
 });

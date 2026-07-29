@@ -1,26 +1,17 @@
 import * as Location from 'expo-location';
 import { router } from 'expo-router';
 import { useState } from 'react';
-import {
-  ActivityIndicator,
-  Alert,
-  KeyboardAvoidingView,
-  Platform,
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-} from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { Alert, Pressable, StyleSheet, View } from 'react-native';
 
+import { Button, Field, Screen, ScreenHeader, Text } from '@/components/ui';
 import { useAuth } from '@/lib/auth-context';
 import { friendlyError } from '@/lib/errors';
 import { createStore } from '@/lib/stores';
-import { colors, fonts, radius, scrollWrap } from '@/lib/theme';
+import { layout, spacing } from '@/lib/theme';
+
+type Errors = Partial<Record<'name' | 'location', string>>;
 
 export default function NewStore() {
-  const insets = useSafeAreaInsets();
   const { profile } = useAuth();
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
@@ -28,6 +19,11 @@ export default function NewStore() {
   const [coords, setCoords] = useState<{ lat: number; lng: number } | null>(null);
   const [locating, setLocating] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [errors, setErrors] = useState<Errors>({});
+
+  const clear = (key: keyof Errors) => {
+    if (errors[key]) setErrors((e) => ({ ...e, [key]: undefined }));
+  };
 
   const useMyLocation = async () => {
     setLocating(true);
@@ -40,6 +36,7 @@ export default function NewStore() {
       }
       const pos = await Location.getCurrentPositionAsync({});
       setCoords({ lat: pos.coords.latitude, lng: pos.coords.longitude });
+      clear('location');
     } catch {
       Alert.alert('NgomongAja', 'Gagal membaca lokasi. Coba lagi atau isi link Google Maps.');
     } finally {
@@ -49,17 +46,15 @@ export default function NewStore() {
 
   const handleCreate = async () => {
     if (!profile) return;
-    if (!name.trim()) {
-      Alert.alert('NgomongAja', 'Nama toko wajib diisi.');
-      return;
-    }
+
+    const next: Errors = {};
+    if (!name.trim()) next.name = 'Nama toko wajib diisi.';
     if (!coords && !gmapsUrl.trim()) {
-      Alert.alert(
-        'NgomongAja',
-        'Isi lokasi tokomu: tekan "Gunakan lokasi saat ini" (saat kamu sedang di toko) atau tempel link Google Maps.'
-      );
-      return;
+      next.location =
+        'Isi lokasi tokomu: tekan "Gunakan lokasi saat ini" (saat kamu sedang di toko) atau tempel link Google Maps.';
     }
+    setErrors(next);
+    if (Object.keys(next).length > 0) return;
 
     setSubmitting(true);
     try {
@@ -81,118 +76,87 @@ export default function NewStore() {
   };
 
   return (
-    <KeyboardAvoidingView
-      style={{ flex: 1, backgroundColor: colors.bg }}
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-      <ScrollView
-        contentContainerStyle={[styles.container, { paddingTop: insets.top + 12 }]}
-        keyboardShouldPersistTaps="handled">
-        <Pressable onPress={() => router.back()} hitSlop={12} style={styles.backWrap}>
-          <Text style={styles.back}>‹ Toko Saya</Text>
-        </Pressable>
-        <Text style={styles.title}>Toko Baru 🏪</Text>
+    <Screen
+      scroll
+      keyboard
+      contentContainerStyle={styles.form}
+      footer={<Button label="Buat Toko" onPress={handleCreate} loading={submitting} />}>
+      <ScreenHeader title="Toko Baru" backLabel="Toko Saya" />
 
-        <Text style={styles.label}>Nama toko</Text>
-        <TextInput
-          style={styles.input}
-          placeholder="Contoh: Warung Bu Rina"
-          placeholderTextColor={colors.secondary}
-          value={name}
-          onChangeText={setName}
-        />
-        <Text style={styles.label}>Deskripsi singkat (opsional)</Text>
-        <TextInput
-          style={[styles.input, styles.multiline]}
-          placeholder="Contoh: Sembako lengkap, buka 06.00–21.00"
-          placeholderTextColor={colors.secondary}
-          multiline
-          value={description}
-          onChangeText={setDescription}
-        />
+      <Field
+        label="Nama toko"
+        placeholder="Contoh: Warung Bu Rina"
+        value={name}
+        onChangeText={(t) => {
+          setName(t);
+          clear('name');
+        }}
+        error={errors.name}
+      />
+      <Field
+        label="Deskripsi singkat (opsional)"
+        placeholder="Contoh: Sembako lengkap, buka 06.00–21.00"
+        multiline
+        value={description}
+        onChangeText={setDescription}
+      />
 
-        <Text style={styles.label}>Lokasi toko</Text>
-        <Pressable
-          style={styles.locationButton}
-          onPress={useMyLocation}
-          disabled={locating}
-          accessibilityRole="button">
-          {locating ? (
-            <ActivityIndicator color={colors.primary} />
-          ) : (
-            <Text style={styles.locationButtonText}>
-              {coords
-                ? `✓ Lokasi tersimpan (${coords.lat.toFixed(5)}, ${coords.lng.toFixed(5)})`
-                : '📍 Gunakan lokasi saat ini'}
-            </Text>
-          )}
-        </Pressable>
-        <TextInput
-          style={styles.input}
-          placeholder="Atau tempel link Google Maps (opsional)"
-          placeholderTextColor={colors.secondary}
-          autoCapitalize="none"
-          value={gmapsUrl}
-          onChangeText={setGmapsUrl}
-        />
-        <Text style={styles.hint}>
-          Tips: tekan tombol lokasi saat kamu sedang berada di toko, supaya pembeli
-          menemukan alamat yang benar.
+      <View style={styles.locationGroup}>
+        <Text variant="label" color="body">
+          Lokasi toko
         </Text>
+        <Button
+          label={coords ? 'Lokasi tersimpan' : 'Gunakan lokasi saat ini'}
+          icon={coords ? 'check' : 'map-pin'}
+          variant="secondary"
+          size="md"
+          onPress={useMyLocation}
+          loading={locating}
+        />
+        {coords && (
+          <Text variant="meta" color="secondary">
+            {coords.lat.toFixed(5)}, {coords.lng.toFixed(5)}
+          </Text>
+        )}
+        <Field
+          placeholder="Atau tempel link Google Maps (opsional)"
+          autoCapitalize="none"
+          keyboardType="url"
+          accessibilityLabel="Link Google Maps"
+          value={gmapsUrl}
+          onChangeText={(t) => {
+            setGmapsUrl(t);
+            clear('location');
+          }}
+          error={errors.location}
+          hint={
+            errors.location
+              ? undefined
+              : 'Tips: tekan tombol lokasi saat kamu sedang berada di toko, supaya pembeli menemukan alamat yang benar.'
+          }
+        />
+      </View>
 
-        <Pressable
-          style={styles.button}
-          onPress={handleCreate}
-          disabled={submitting}
-          accessibilityRole="button">
-          {submitting ? (
-            <ActivityIndicator color={colors.white} />
-          ) : (
-            <Text style={styles.buttonText}>Buat Toko</Text>
-          )}
-        </Pressable>
-
-        <Pressable onPress={() => router.back()} hitSlop={12} style={styles.cancelWrap}>
-          <Text style={styles.cancel}>Batal</Text>
-        </Pressable>
-      </ScrollView>
-    </KeyboardAvoidingView>
+      <Pressable
+        onPress={() => router.back()}
+        style={styles.cancel}
+        accessibilityRole="button"
+        accessibilityLabel="Batal, kembali tanpa membuat toko">
+        <Text variant="label" color="body" align="center">
+          Batal
+        </Text>
+      </Pressable>
+    </Screen>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { ...scrollWrap, gap: 12 },
-  backWrap: { alignSelf: 'flex-start', paddingVertical: 12 },
-  back: { color: colors.primary, fontSize: 16, fontWeight: '600' },
-  title: { fontSize: 28, fontFamily: fonts.heading, marginBottom: 8, color: colors.text },
-  label: { fontSize: 13, fontFamily: fonts.bodyBold, color: colors.body, marginTop: 4 },
-  input: {
-    borderWidth: 1,
-    borderColor: colors.inputBorder,
-    borderRadius: radius.md,
-    padding: 12,
-    fontSize: 16,
-    backgroundColor: colors.card,
-    color: colors.text,
+  form: { gap: spacing.md, paddingBottom: spacing.xl },
+  locationGroup: { gap: spacing.sm },
+  cancel: {
+    alignSelf: 'center',
+    minHeight: layout.minTouch,
+    justifyContent: 'center',
+    paddingHorizontal: spacing.lg,
   },
-  multiline: { minHeight: 70, textAlignVertical: 'top' },
-  locationButton: {
-    borderWidth: 2,
-    borderColor: colors.primary,
-    borderRadius: radius.md,
-    padding: 12,
-    alignItems: 'center',
-    backgroundColor: colors.primarySoft,
-  },
-  locationButtonText: { color: colors.primaryDark, fontSize: 15, fontWeight: '600' },
-  hint: { fontSize: 12, color: colors.secondary, lineHeight: 17 },
-  button: {
-    backgroundColor: colors.primary,
-    borderRadius: radius.md,
-    padding: 14,
-    alignItems: 'center',
-    marginTop: 8,
-  },
-  buttonText: { color: colors.onPrimary, fontSize: 16, fontWeight: '600' },
-  cancelWrap: { alignSelf: 'center', paddingVertical: 12, marginTop: 8 },
-  cancel: { textAlign: 'center', color: colors.body, fontSize: 14 },
 });

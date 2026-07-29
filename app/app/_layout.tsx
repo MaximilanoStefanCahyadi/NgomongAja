@@ -1,9 +1,8 @@
-import { Caprasimo_400Regular } from '@expo-google-fonts/caprasimo';
+import { Inter_400Regular, Inter_600SemiBold } from '@expo-google-fonts/inter';
 import {
-  Figtree_400Regular,
-  Figtree_600SemiBold,
-  Figtree_700Bold,
-} from '@expo-google-fonts/figtree';
+  PlusJakartaSans_600SemiBold,
+  PlusJakartaSans_700Bold,
+} from '@expo-google-fonts/plus-jakarta-sans';
 import { DefaultTheme, ThemeProvider } from '@react-navigation/native';
 import { useFonts } from 'expo-font';
 import { Stack } from 'expo-router';
@@ -22,12 +21,12 @@ const lightTheme = {
 };
 
 export default function RootLayout() {
-  // Design fonts (Hijau Rupiah): Caprasimo for display, Figtree for body.
+  // Brand fonts: Plus Jakarta Sans for headings and buttons, Inter for the rest.
   const [fontsLoaded] = useFonts({
-    Caprasimo_400Regular,
-    Figtree_400Regular,
-    Figtree_600SemiBold,
-    Figtree_700Bold,
+    PlusJakartaSans_600SemiBold,
+    PlusJakartaSans_700Bold,
+    Inter_400Regular,
+    Inter_600SemiBold,
   });
 
   if (!fontsLoaded) {
@@ -39,7 +38,7 @@ export default function RootLayout() {
           alignItems: 'center',
           backgroundColor: colors.bg,
         }}>
-        <ActivityIndicator size="large" color={colors.primary} />
+        <ActivityIndicator size="large" color={colors.primaryInk} />
       </View>
     );
   }

@@ -1,23 +1,24 @@
+import { Feather } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
-import { router, useFocusEffect } from 'expo-router';
+import { useFocusEffect } from 'expo-router';
 import { useCallback, useState } from 'react';
-import {
-  ActivityIndicator,
-  Alert,
-  Image,
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  View,
-} from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { Alert, Image, Pressable, StyleSheet, View } from 'react-native';
 
+import {
+  Button,
+  Card,
+  Field,
+  ListState,
+  Screen,
+  ScreenHeader,
+  SectionLabel,
+  Tag,
+  Text,
+} from '@/components/ui';
 import { listAddresses, type Address } from '@/lib/addresses';
 import { useAuth } from '@/lib/auth-context';
 import { friendlyError } from '@/lib/errors';
-import { colors, fonts, radius, scrollWrap, spacing } from '@/lib/theme';
+import { colors, layout, radius, spacing } from '@/lib/theme';
 import { getMyVerification, submitVerification, type Verification } from '@/lib/verification';
 
 // "2026-07-15T…" -> "15 Jul 2026"
@@ -30,7 +31,6 @@ function formatDate(iso: string): string {
 }
 
 export default function BuyerProfile() {
-  const insets = useSafeAreaInsets();
   const { profile, signOut } = useAuth();
   const [verification, setVerification] = useState<Verification | null>(null);
   const [loaded, setLoaded] = useState(false);
@@ -66,26 +66,28 @@ export default function BuyerProfile() {
 
   if (!profile || !loaded) {
     return (
-      <View style={styles.center}>
-        <ActivityIndicator size="large" color={colors.primary} />
-      </View>
+      <Screen centered>
+        <ListState state="loading" message="Memuat profilmu…" />
+      </Screen>
     );
   }
 
   if (loadFailed) {
     return (
-      <View style={styles.center}>
-        <Text style={styles.errorText}>Gagal memuat. Periksa internetmu.</Text>
-        <Pressable
-          style={styles.button}
-          onPress={() => {
-            setLoaded(false);
-            load();
+      <Screen centered>
+        <ListState
+          state="error"
+          title="Gagal memuat"
+          message="Periksa koneksi internetmu, lalu coba lagi."
+          action={{
+            label: 'Coba Lagi',
+            onPress: () => {
+              setLoaded(false);
+              load();
+            },
           }}
-          accessibilityRole="button">
-          <Text style={styles.buttonText}>Coba Lagi</Text>
-        </Pressable>
-      </View>
+        />
+      </Screen>
     );
   }
 
@@ -119,247 +121,162 @@ export default function BuyerProfile() {
     }
   };
 
-  const showForm =
-    !verification || (verification.status === 'rejected' && resubmitting);
+  const showForm = !verification || (verification.status === 'rejected' && resubmitting);
 
   return (
-    <ScrollView
-      style={{ backgroundColor: colors.bg }}
-      contentContainerStyle={[styles.container, { paddingTop: insets.top + 12 }]}
-      keyboardShouldPersistTaps="handled">
-      <Pressable onPress={() => router.back()} hitSlop={12} style={styles.backWrap}>
-        <Text style={styles.back}>‹ Beranda</Text>
-      </Pressable>
-      <Text style={styles.title}>Profil Saya</Text>
+    <Screen scroll keyboard contentContainerStyle={styles.content}>
+      <ScreenHeader title="Profil Saya" backLabel="Beranda" />
 
-      <View style={styles.card}>
-        <Text style={styles.name}>{profile.full_name}</Text>
-        <Text style={styles.meta}>{profile.phone ?? 'Nomor HP belum diisi'}</Text>
-        <Text style={styles.roleBadge}>Pembeli</Text>
-      </View>
+      <Card gap={spacing.sm}>
+        <Text variant="title" color="text">
+          {profile.full_name}
+        </Text>
+        <Text variant="meta" color="secondary">
+          {profile.phone ?? 'Nomor HP belum diisi'}
+        </Text>
+        <Tag label="Pembeli" tone="neutral" />
+      </Card>
 
-      <Text style={styles.sectionTitle}>Verifikasi Akun</Text>
+      <SectionLabel>Verifikasi Akun</SectionLabel>
 
       {verification?.status === 'approved' && (
-        // Achievement chip — a small "trophy" moment for finishing verification.
-        <View style={styles.achievementChip}>
-          <Text style={styles.achievementEmoji}>🏅</Text>
-          <View style={{ flex: 1 }}>
-            <Text style={styles.achievementTitle}>Terverifikasi</Text>
-            <Text style={styles.achievementDesc}>Akunmu sudah tepercaya. Keren!</Text>
+        // A small "trophy" moment for finishing verification — one toska tint
+        // with a left rule, not a tinted card plus a border plus a shadow.
+        <Card tone="success" row>
+          <Feather name="award" size={22} color={colors.successInk} />
+          <View style={styles.flex}>
+            <Text variant="bodyStrong" color="success">
+              Terverifikasi
+            </Text>
+            <Text variant="meta" color="success">
+              Akunmu sudah tepercaya. Keren!
+            </Text>
           </View>
-          <Text style={styles.achievementSpark}>✨</Text>
-        </View>
+        </Card>
       )}
 
       {verification?.status === 'pending' && (
-        <View style={styles.pendingBox}>
-          <Text style={styles.pendingText}>
-            ⏳ Menunggu peninjauan (diajukan {formatDate(verification.created_at)})
+        <Card tone="warn" row>
+          <Feather name="clock" size={22} color={colors.warnInk} />
+          <Text variant="body" color="warn" style={styles.flex}>
+            Menunggu peninjauan (diajukan {formatDate(verification.created_at)})
           </Text>
-        </View>
+        </Card>
       )}
 
       {verification?.status === 'rejected' && !resubmitting && (
-        <View style={styles.rejectedBox}>
-          <Text style={styles.rejectedTitle}>❌ Verifikasi ditolak</Text>
+        <Card tone="danger" gap={spacing.sm}>
+          <View style={styles.cardTitleRow}>
+            <Feather name="x-circle" size={22} color={colors.dangerInk} />
+            <Text variant="bodyStrong" color="danger" style={styles.flex}>
+              Verifikasi ditolak
+            </Text>
+          </View>
           {!!verification.rejection_reason && (
-            <Text style={styles.rejectedReason}>{verification.rejection_reason}</Text>
+            <Text variant="body" color="body">
+              {verification.rejection_reason}
+            </Text>
           )}
-          <Pressable style={styles.button} onPress={() => setResubmitting(true)}>
-            <Text style={styles.buttonText}>Ajukan Ulang</Text>
-          </Pressable>
-        </View>
+          <Button
+            label="Ajukan Ulang"
+            size="md"
+            fullWidth={false}
+            onPress={() => setResubmitting(true)}
+          />
+        </Card>
       )}
 
       {showForm && (
-        <View style={styles.card}>
-          <Text style={styles.privacy}>
-            Foto KTP kamu disimpan terenkripsi dan hanya dilihat tim verifikasi. Verifikasi
+        <Card gap={spacing.md}>
+          <Text variant="meta" color="secondary">
+            Foto KTP kamu disimpan di tempat privat dan hanya dilihat tim verifikasi. Verifikasi
             memberi lencana Terverifikasi pada akunmu.
           </Text>
 
-          <Text style={styles.label}>NIK (16 digit)</Text>
-          <TextInput
-            style={styles.input}
+          <Field
+            label="NIK (16 digit)"
             placeholder="Contoh: 3171234567890001"
             keyboardType="number-pad"
             maxLength={16}
             value={nik}
             onChangeText={(t) => setNik(t.replace(/\D/g, ''))}
+            error={nik.length > 0 && !nikValid ? 'NIK harus tepat 16 digit angka.' : undefined}
           />
-          {nik.length > 0 && !nikValid && (
-            <Text style={styles.warn}>⚠️ NIK harus tepat 16 digit angka.</Text>
-          )}
 
-          <Text style={styles.label}>Foto KTP</Text>
-          {imageUri && <Image source={{ uri: imageUri }} style={styles.preview} />}
-          <Pressable style={styles.outlineButton} onPress={pickImage}>
-            <Text style={styles.outlineButtonText}>
-              {imageUri ? 'Ganti Foto KTP' : '📷 Pilih Foto KTP'}
+          <View style={styles.photoBlock}>
+            <Text variant="label" color="body">
+              Foto KTP
             </Text>
-          </Pressable>
+            {imageUri && <Image source={{ uri: imageUri }} style={styles.preview} />}
+            <Button
+              label={imageUri ? 'Ganti Foto KTP' : 'Pilih Foto KTP'}
+              icon="camera"
+              variant="secondary"
+              size="md"
+              onPress={pickImage}
+            />
+          </View>
 
-          <Pressable
-            style={[styles.button, !canSubmit && styles.buttonDisabled]}
+          <Button
+            label="Ajukan Verifikasi"
             onPress={submit}
-            disabled={!canSubmit}>
-            {submitting ? (
-              <ActivityIndicator color="#fff" />
-            ) : (
-              <Text style={styles.buttonText}>Ajukan Verifikasi</Text>
-            )}
-          </Pressable>
-        </View>
+            loading={submitting}
+            disabled={!canSubmit}
+          />
+        </Card>
       )}
 
-      <Text style={styles.sectionTitle}>Alamat Tersimpan</Text>
+      <SectionLabel>Alamat Tersimpan</SectionLabel>
       {addresses.length === 0 ? (
-        <Text style={styles.empty}>Belum ada alamat tersimpan.</Text>
+        <ListState
+          state="empty"
+          icon="map-pin"
+          message="Belum ada alamat tersimpan. Alamat yang kamu pakai saat memesan akan muncul di sini."
+        />
       ) : (
         addresses.map((a) => (
-          <View key={a.id} style={styles.addressCard}>
-            {!!a.label && <Text style={styles.addressLabel}>{a.label}</Text>}
-            <Text style={styles.addressText}>{a.full_address}</Text>
-          </View>
+          <Card key={a.id} padding="sm" gap={spacing.xs}>
+            {!!a.label && (
+              <Text variant="label" color="secondary">
+                {a.label}
+              </Text>
+            )}
+            <Text variant="body" color="body">
+              {a.full_address}
+            </Text>
+          </Card>
         ))
       )}
 
-      <Pressable onPress={signOut} hitSlop={12} style={styles.signOutWrap}>
-        <Text style={styles.signOut}>Keluar</Text>
+      <Pressable
+        onPress={signOut}
+        style={styles.signOut}
+        accessibilityRole="button"
+        accessibilityLabel="Keluar dari akun">
+        <Text variant="label" color="danger" align="center">
+          Keluar
+        </Text>
       </Pressable>
-    </ScrollView>
+    </Screen>
   );
 }
 
 const styles = StyleSheet.create({
-  center: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    gap: 16,
-    padding: spacing.xl,
-    backgroundColor: colors.bg,
-  },
-  errorText: { color: colors.body, fontSize: 15, textAlign: 'center' },
-  container: { ...scrollWrap, gap: 10 },
-  backWrap: { alignSelf: 'flex-start', paddingVertical: 12 },
-  back: { color: colors.primary, fontSize: 16, fontWeight: '600' },
-  title: { fontSize: 28, fontFamily: fonts.heading, color: colors.text },
-  card: {
-    backgroundColor: colors.card,
-    borderRadius: radius.lg,
-    padding: 16,
-    borderWidth: 1,
-    borderColor: colors.border,
-    gap: spacing.sm,
-  },
-  name: { fontSize: 18, fontFamily: fonts.bodySemi, color: colors.text },
-  meta: { fontSize: 14, color: colors.body },
-  roleBadge: {
-    alignSelf: 'flex-start',
-    fontSize: 12,
-    fontFamily: fonts.bodySemi,
-    color: colors.primaryDark,
-    backgroundColor: colors.primaryChipBg,
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: radius.pill,
-    overflow: 'hidden',
-  },
-  sectionTitle: { fontSize: 16, fontFamily: fonts.bodySemi, marginTop: 10, color: colors.text },
-  achievementChip: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-    backgroundColor: colors.primaryChipBg,
-    borderRadius: radius.lg,
-    padding: 14,
-    borderWidth: 2,
-    borderColor: colors.amberSoftBorder,
-    shadowColor: colors.amber,
-    shadowOpacity: 0.35,
-    shadowRadius: 8,
-    shadowOffset: { width: 0, height: 2 },
-    elevation: 3,
-  },
-  achievementEmoji: { fontSize: 28 },
-  achievementTitle: { color: colors.primaryDark, fontFamily: fonts.heading, fontSize: 16 },
-  achievementDesc: { color: colors.primaryDark, fontSize: 13, marginTop: 1 },
-  achievementSpark: { fontSize: 18 },
-  pendingBox: {
-    backgroundColor: colors.amberBg,
-    borderRadius: radius.md,
-    padding: 14,
-    borderWidth: 1,
-    borderColor: '#fde68a',
-  },
-  pendingText: { color: colors.amberText, fontSize: 14, lineHeight: 20 },
-  rejectedBox: {
-    backgroundColor: colors.dangerBg,
-    borderRadius: radius.md,
-    padding: 14,
-    borderWidth: 1,
-    borderColor: colors.dangerBorder,
-    gap: spacing.sm,
-  },
-  rejectedTitle: { color: colors.dangerDark, fontFamily: fonts.bodyBold, fontSize: 15 },
-  rejectedReason: { color: colors.dangerDark, fontSize: 14, lineHeight: 20 },
-  privacy: {
-    fontSize: 13,
-    color: colors.amberText,
-    backgroundColor: colors.amberBg,
-    borderRadius: radius.sm,
-    padding: 12,
-    lineHeight: 19,
-    overflow: 'hidden',
-  },
-  label: { fontSize: 13, fontFamily: fonts.bodyBold, color: colors.body, marginTop: spacing.xs },
-  input: {
-    borderWidth: 1,
-    borderColor: colors.inputBorder,
-    borderRadius: radius.md,
-    padding: 10,
-    fontSize: 15,
-    backgroundColor: colors.card,
-    color: colors.text,
-  },
-  warn: { color: '#b45309', fontSize: 15 },
+  content: { gap: spacing.sm, paddingBottom: spacing.xxl },
+  flex: { flex: 1, minWidth: 0 },
+  cardTitleRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
+  photoBlock: { gap: spacing.sm },
   preview: {
     width: '100%',
     height: 180,
     borderRadius: radius.sm,
     backgroundColor: colors.neutralBg,
   },
-  outlineButton: {
-    borderWidth: 2,
-    borderColor: colors.primary,
-    borderRadius: radius.md,
-    padding: 12,
-    alignItems: 'center',
-    backgroundColor: colors.primarySoft,
+  signOut: {
+    alignSelf: 'center',
+    minHeight: layout.minTouch,
+    justifyContent: 'center',
+    paddingHorizontal: spacing.lg,
+    marginTop: spacing.sm,
   },
-  outlineButtonText: { color: colors.primaryDark, fontSize: 14, fontWeight: '600' },
-  button: {
-    backgroundColor: colors.primary,
-    borderRadius: radius.md,
-    padding: 14,
-    alignItems: 'center',
-    marginTop: spacing.xs,
-  },
-  buttonDisabled: { backgroundColor: colors.disabled },
-  buttonText: { color: colors.onPrimary, fontSize: 16, fontWeight: '600' },
-  empty: { color: colors.body, fontSize: 14 },
-  addressCard: {
-    backgroundColor: colors.card,
-    borderRadius: radius.lg,
-    padding: 14,
-    borderWidth: 1,
-    borderColor: colors.border,
-    gap: 2,
-  },
-  addressLabel: { fontSize: 13, fontFamily: fonts.bodyBold, color: colors.primaryDark },
-  addressText: { fontSize: 14, color: colors.body, lineHeight: 20 },
-  signOutWrap: { alignSelf: 'center', paddingVertical: 12, marginTop: spacing.sm },
-  signOut: { textAlign: 'center', color: colors.danger, fontSize: 14, fontWeight: '600' },
 });

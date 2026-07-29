@@ -1,55 +1,26 @@
-import { router, useLocalSearchParams } from 'expo-router';
-import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useLocalSearchParams } from 'expo-router';
 
 import { OrderChat } from '@/components/order-chat';
+import { ListState, Screen, ScreenHeader } from '@/components/ui';
 import { useAuth } from '@/lib/auth-context';
-import { colors, fonts } from '@/lib/theme';
 
 // Thin wrapper: the shared OrderChat component does all the work.
 export default function SellerOrderChat() {
-  const insets = useSafeAreaInsets();
   const { orderId } = useLocalSearchParams<{ orderId: string }>();
   const { profile } = useAuth();
 
   if (!orderId || !profile) {
     return (
-      <View style={styles.center}>
-        <ActivityIndicator size="large" color={colors.primary} />
-      </View>
+      <Screen centered>
+        <ListState state="loading" message="Memuat obrolan…" />
+      </Screen>
     );
   }
 
   return (
-    <View style={styles.container}>
-      <View style={[styles.header, { paddingTop: insets.top + 12 }]}>
-        <Pressable onPress={() => router.back()} hitSlop={12} style={styles.backWrap}>
-          <Text style={styles.back}>‹ Pesanan</Text>
-        </Pressable>
-        <Text style={styles.title}>Chat Pembeli</Text>
-      </View>
+    <Screen keyboard edges={{ top: true, bottom: true }}>
+      <ScreenHeader title="Chat Pembeli" backLabel="Pesanan" />
       <OrderChat orderId={orderId} myId={profile.id} />
-    </View>
+    </Screen>
   );
 }
-
-const styles = StyleSheet.create({
-  center: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: colors.bg,
-  },
-  container: { flex: 1, backgroundColor: colors.bg },
-  header: {
-    paddingHorizontal: 24,
-    paddingBottom: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border,
-    backgroundColor: colors.card,
-    gap: 4,
-  },
-  backWrap: { alignSelf: 'flex-start', paddingVertical: 6 },
-  back: { color: colors.primary, fontSize: 16, fontWeight: '600' },
-  title: { fontSize: 20, fontFamily: fonts.heading, color: colors.text },
-});

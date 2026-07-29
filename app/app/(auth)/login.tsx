@@ -1,30 +1,27 @@
-import { Feather } from '@expo/vector-icons';
 import { Link, router } from 'expo-router';
 import { useState } from 'react';
-import {
-  ActivityIndicator,
-  Alert,
-  Pressable,
-  StyleSheet,
-  Text,
-  TextInput,
-  View,
-} from 'react-native';
+import { Alert, Pressable, StyleSheet } from 'react-native';
 
+import { AuthHeader, Button, Field, Screen, Text } from '@/components/ui';
 import { friendlyError } from '@/lib/errors';
 import { supabase } from '@/lib/supabase';
-import { colors, fonts, radius, spacing } from '@/lib/theme';
+import { layout, spacing } from '@/lib/theme';
 
 export default function Login() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [errors, setErrors] = useState<{ email?: string; password?: string }>({});
   const [submitting, setSubmitting] = useState(false);
 
   const handleLogin = async () => {
-    if (!email.trim() || !password) {
-      Alert.alert('NgomongAja', 'Isi email dan kata sandi dulu ya.');
-      return;
-    }
+    // Inline validation instead of an Alert — the message belongs next to
+    // the field it is about, not in a modal that hides the form.
+    const next: typeof errors = {};
+    if (!email.trim()) next.email = 'Isi emailmu dulu ya.';
+    if (!password) next.password = 'Isi kata sandimu dulu ya.';
+    setErrors(next);
+    if (Object.keys(next).length > 0) return;
+
     setSubmitting(true);
     const { error } = await supabase.auth.signInWithPassword({
       email: email.trim(),
@@ -33,7 +30,9 @@ export default function Login() {
     setSubmitting(false);
 
     if (error) {
-      Alert.alert('Gagal masuk', friendlyError(error));
+      // Never "Gagal masuk" — that reads as an accusation. Offer the way out,
+      // not the diagnosis.
+      Alert.alert('Belum cocok', friendlyError(error));
       return;
     }
     // Success: the AuthProvider picks up the new session automatically;
@@ -42,111 +41,72 @@ export default function Login() {
   };
 
   return (
-    <View style={styles.container}>
-      <View style={styles.brand}>
-        <View style={styles.logoCircle}>
-          <Feather name="mic" size={40} color={colors.onPrimary} />
-        </View>
-        <Text style={styles.title}>NgomongAja</Text>
-        <Text style={styles.subtitle}>Belanja di warung, cukup ngomong aja.</Text>
-      </View>
+    <Screen
+      scroll
+      keyboard
+      edges={{ top: false, bottom: true }}
+      contentContainerStyle={styles.page}>
+      <AuthHeader active="login" greeting="Selamat datang lagi" />
 
-      <Text style={styles.label}>Email</Text>
-      <TextInput
-        style={styles.input}
-        placeholder="Email"
-        placeholderTextColor={colors.secondary}
+      <Field
+        containerStyle={styles.firstField}
+        label="Email"
+        placeholder="nama@email.com"
+        leftIcon="mail"
         autoCapitalize="none"
+        autoComplete="email"
+        textContentType="emailAddress"
         keyboardType="email-address"
         value={email}
-        onChangeText={setEmail}
-      />
-      <Text style={styles.label}>Kata sandi</Text>
-      <TextInput
-        style={styles.input}
-        placeholder="Kata sandi"
-        placeholderTextColor={colors.secondary}
-        secureTextEntry
-        value={password}
-        onChangeText={setPassword}
+        onChangeText={(t) => {
+          setEmail(t);
+          if (errors.email) setErrors((e) => ({ ...e, email: undefined }));
+        }}
+        error={errors.email}
       />
 
-      <Pressable
-        style={({ pressed }) => [styles.button, pressed && styles.buttonPressed]}
-        onPress={handleLogin}
-        disabled={submitting}
-        accessibilityRole="button">
-        {submitting ? (
-          <ActivityIndicator color={colors.onPrimary} />
-        ) : (
-          <Text style={styles.buttonText}>Masuk</Text>
-        )}
-      </Pressable>
+      <Field
+        label="Kata sandi"
+        placeholder="Kata sandi"
+        leftIcon="lock"
+        secureTextEntry
+        autoComplete="current-password"
+        textContentType="password"
+        value={password}
+        onChangeText={(t) => {
+          setPassword(t);
+          if (errors.password) setErrors((e) => ({ ...e, password: undefined }));
+        }}
+        error={errors.password}
+      />
+
+      <Button label="Masuk" onPress={handleLogin} loading={submitting} style={styles.submit} />
 
       <Link href="/(auth)/register" asChild>
-        <Pressable hitSlop={12} style={styles.linkWrap} accessibilityRole="link">
-          <Text style={styles.linkMuted}>
-            Belum punya akun? <Text style={styles.link}>Daftar di sini</Text>
+        <Pressable style={styles.linkWrap} accessibilityRole="link">
+          <Text variant="meta" color="secondary" align="center">
+            Belum punya akun?{' '}
+            <Text variant="meta" color="link">
+              Daftar di sini
+            </Text>
           </Text>
         </Pressable>
       </Link>
-    </View>
+    </Screen>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
+  // No top padding: the dome runs under the status bar and owns the inset.
+  page: { paddingTop: 0, gap: spacing.md },
+  // The intro block used to space the form off the toggle; it is gone, so
+  // the first field carries that gap itself.
+  firstField: { marginTop: spacing.lg },
+  submit: { marginTop: spacing.sm },
+  linkWrap: {
+    alignSelf: 'center',
+    minHeight: layout.minTouch,
     justifyContent: 'center',
-    padding: 28,
-    gap: spacing.md,
-    backgroundColor: colors.bg,
+    paddingHorizontal: spacing.md,
   },
-  brand: { alignItems: 'center', gap: 14, marginBottom: 18 },
-  logoCircle: {
-    width: 88,
-    height: 88,
-    borderRadius: radius.pill,
-    backgroundColor: colors.primary,
-    alignItems: 'center',
-    justifyContent: 'center',
-    shadowColor: '#2e2b25',
-    shadowOpacity: 0.16,
-    shadowRadius: 10,
-    shadowOffset: { width: 0, height: 3 },
-    elevation: 4,
-  },
-  title: { fontFamily: fonts.heading, fontSize: 34, color: colors.text },
-  subtitle: {
-    fontFamily: fonts.body,
-    fontSize: 14.5,
-    textAlign: 'center',
-    color: colors.secondary,
-    lineHeight: 22,
-  },
-  label: { fontFamily: fonts.body, fontSize: 12, color: colors.body, marginTop: spacing.xs },
-  input: {
-    minHeight: 46,
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: radius.pill,
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    fontSize: 15,
-    fontFamily: fonts.body,
-    backgroundColor: colors.card,
-    color: colors.text,
-  },
-  button: {
-    backgroundColor: colors.primary,
-    borderRadius: radius.pill,
-    padding: 15,
-    alignItems: 'center',
-    marginTop: spacing.sm,
-  },
-  buttonPressed: { backgroundColor: colors.primaryDark },
-  buttonText: { color: colors.onPrimary, fontSize: 17, fontFamily: fonts.heading },
-  linkWrap: { alignSelf: 'center', paddingVertical: 12, marginTop: spacing.xs },
-  linkMuted: { fontFamily: fonts.body, color: colors.secondary, fontSize: 14 },
-  link: { color: colors.primaryDark, fontFamily: fonts.bodyBold },
 });

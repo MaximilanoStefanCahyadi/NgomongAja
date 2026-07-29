@@ -1,26 +1,16 @@
+import { Feather } from '@expo/vector-icons';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
-import {
-  ActivityIndicator,
-  Alert,
-  KeyboardAvoidingView,
-  Platform,
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  Switch,
-  Text,
-  TextInput,
-  View,
-} from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { Alert, StyleSheet, Switch, TextInput, View } from 'react-native';
 
+import { Button, Card, Field, Screen, ScreenHeader, Text } from '@/components/ui';
 import { friendlyError } from '@/lib/errors';
 import { createProduct, listProducts, updateProduct } from '@/lib/products';
-import { colors, fonts, radius, scrollWrap } from '@/lib/theme';
+import { colors, layout, spacing } from '@/lib/theme';
+
+type Errors = Partial<Record<'name' | 'price' | 'stock', string>>;
 
 export default function ProductForm() {
-  const insets = useSafeAreaInsets();
   const { id: storeId, productId } = useLocalSearchParams<{
     id: string;
     productId?: string;
@@ -32,8 +22,15 @@ export default function ProductForm() {
   const [stock, setStock] = useState('');
   const [isActive, setIsActive] = useState(true);
   const [submitting, setSubmitting] = useState(false);
+  const [errors, setErrors] = useState<Errors>({});
   const [sessionCount, setSessionCount] = useState(0); // "added this session" (PA-11)
+  // Puts the cursor back on the name field after "Simpan & Tambah Lagi",
+  // so the seller can keep typing without reaching for the screen.
   const nameRef = useRef<TextInput>(null);
+
+  const clear = (key: keyof Errors) => {
+    if (errors[key]) setErrors((e) => ({ ...e, [key]: undefined }));
+  };
 
   useEffect(() => {
     // Edit mode: load the existing product's values into the form.
@@ -51,10 +48,14 @@ export default function ProductForm() {
   const parseForm = () => {
     const priceNum = parseInt(price.replace(/\D/g, ''), 10);
     const stockNum = parseInt(stock.replace(/\D/g, ''), 10);
-    if (!name.trim() || isNaN(priceNum) || isNaN(stockNum)) {
-      Alert.alert('NgomongAja', 'Isi nama, harga, dan stok dengan benar ya.');
-      return null;
-    }
+    // Validation belongs next to the field that is wrong, not in an alert that
+    // hides the form behind it.
+    const next: Errors = {};
+    if (!name.trim()) next.name = 'Isi nama barangnya ya.';
+    if (isNaN(priceNum)) next.price = 'Isi harga dengan angka ya.';
+    if (isNaN(stockNum)) next.stock = 'Isi stok dengan angka ya.';
+    setErrors(next);
+    if (Object.keys(next).length > 0) return null;
     return { name: name.trim(), price: priceNum, stock: stockNum };
   };
 
@@ -90,145 +91,105 @@ export default function ProductForm() {
   };
 
   return (
-    <KeyboardAvoidingView
-      style={{ flex: 1, backgroundColor: colors.bg }}
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-      <ScrollView
-        contentContainerStyle={[styles.container, { paddingTop: insets.top + 12 }]}
-        keyboardShouldPersistTaps="handled">
-        <Pressable onPress={() => router.back()} hitSlop={12} style={styles.backWrap}>
-          <Text style={styles.back}>‹ Toko</Text>
-        </Pressable>
-        <Text style={styles.title}>{isEdit ? 'Ubah Barang' : 'Tambah Barang'}</Text>
-        {!isEdit && sessionCount > 0 && (
-          <View style={styles.achievement}>
-            <Text style={styles.achievementText}>
-              🔥 {sessionCount} barang ditambahkan sesi ini!
-            </Text>
-          </View>
-        )}
-
-        <Text style={styles.label}>Nama barang</Text>
-        <TextInput
-          ref={nameRef}
-          style={styles.input}
-          placeholder="Contoh: Minyak Goreng Bimoli 1L"
-          placeholderTextColor={colors.secondary}
-          value={name}
-          onChangeText={setName}
-          autoFocus
-        />
-        <Text style={styles.label}>Harga (Rupiah)</Text>
-        <TextInput
-          style={styles.input}
-          placeholder="Contoh: 18000"
-          placeholderTextColor={colors.secondary}
-          keyboardType="number-pad"
-          value={price}
-          onChangeText={setPrice}
-        />
-        <Text style={styles.label}>Stok</Text>
-        <TextInput
-          style={styles.input}
-          placeholder="Contoh: 12"
-          placeholderTextColor={colors.secondary}
-          keyboardType="number-pad"
-          value={stock}
-          onChangeText={setStock}
-        />
-
-        {isEdit && (
-          <View style={styles.toggleRow}>
-            <Text style={styles.toggleLabel}>Tampilkan ke pembeli</Text>
-            <Switch
-              value={isActive}
-              onValueChange={setIsActive}
-              accessibilityLabel="Tampilkan barang ke pembeli"
+    <Screen
+      scroll
+      keyboard
+      contentContainerStyle={styles.form}
+      footer={
+        <View style={styles.footer}>
+          {!isEdit && (
+            <Button
+              label="Simpan & Tambah Lagi"
+              variant="secondary"
+              size="md"
+              icon="plus"
+              onPress={() => save(true)}
+              disabled={submitting}
             />
-          </View>
-        )}
-
-        {!isEdit && (
-          <Pressable
-            style={[styles.button, styles.secondaryButton]}
-            onPress={() => save(true)}
-            disabled={submitting}
-            accessibilityRole="button">
-            {submitting ? (
-              <ActivityIndicator color={colors.primary} />
-            ) : (
-              <Text style={styles.secondaryButtonText}>Simpan & Tambah Lagi</Text>
-            )}
-          </Pressable>
-        )}
-
-        <Pressable
-          style={styles.button}
-          onPress={() => save(false)}
-          disabled={submitting}
-          accessibilityRole="button">
-          {submitting ? (
-            <ActivityIndicator color={colors.white} />
-          ) : (
-            <Text style={styles.buttonText}>
-              {isEdit ? 'Simpan Perubahan' : 'Simpan & Selesai'}
-            </Text>
           )}
-        </Pressable>
+          <Button
+            label={isEdit ? 'Simpan Perubahan' : 'Simpan & Selesai'}
+            onPress={() => save(false)}
+            loading={submitting}
+          />
+        </View>
+      }>
+      <ScreenHeader title={isEdit ? 'Ubah Barang' : 'Tambah Barang'} backLabel="Toko" />
 
-        <Pressable onPress={() => router.back()} hitSlop={12} style={styles.cancelWrap}>
-          <Text style={styles.cancel}>Batal</Text>
-        </Pressable>
-      </ScrollView>
-    </KeyboardAvoidingView>
+      {!isEdit && sessionCount > 0 && (
+        // Progress, not a warning — one toska tint with a left rule, and the
+        // count is plain text rather than bold amber on amber.
+        <Card tone="success" padding="sm" row>
+          <Feather name="check-circle" size={20} color={colors.successInk} />
+          <Text variant="body" color="success" accessibilityLiveRegion="polite">
+            {sessionCount} barang ditambahkan sesi ini!
+          </Text>
+        </Card>
+      )}
+
+      <Field
+        ref={nameRef}
+        label="Nama barang"
+        placeholder="Contoh: Minyak Goreng Bimoli 1L"
+        value={name}
+        onChangeText={(t) => {
+          setName(t);
+          clear('name');
+        }}
+        error={errors.name}
+        autoFocus
+      />
+      <Field
+        label="Harga (Rupiah)"
+        placeholder="Contoh: 18000"
+        keyboardType="number-pad"
+        value={price}
+        onChangeText={(t) => {
+          setPrice(t);
+          clear('price');
+        }}
+        error={errors.price}
+      />
+      <Field
+        label="Stok"
+        placeholder="Contoh: 12"
+        keyboardType="number-pad"
+        value={stock}
+        onChangeText={(t) => {
+          setStock(t);
+          clear('stock');
+        }}
+        error={errors.stock}
+      />
+
+      {isEdit && (
+        <View style={styles.toggleRow}>
+          <Text variant="body" color="body" style={styles.toggleLabel}>
+            Tampilkan ke pembeli
+          </Text>
+          <Switch
+            value={isActive}
+            onValueChange={setIsActive}
+            trackColor={{ true: colors.primary, false: colors.neutralBg }}
+            accessibilityLabel="Tampilkan barang ke pembeli"
+          />
+        </View>
+      )}
+
+      <Button label="Batal" variant="quiet" size="md" onPress={() => router.back()} />
+    </Screen>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { ...scrollWrap, gap: 12 },
-  backWrap: { alignSelf: 'flex-start', paddingVertical: 12 },
-  back: { color: colors.primary, fontSize: 16, fontWeight: '600' },
-  title: { fontSize: 28, fontFamily: fonts.heading, color: colors.text },
-  achievement: {
-    backgroundColor: colors.amberSoft,
-    borderWidth: 1,
-    borderColor: colors.amberSoftBorder,
-    borderRadius: radius.md,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    alignSelf: 'flex-start',
-  },
-  achievementText: { color: '#854d0e', fontSize: 14, fontWeight: '700' },
-  label: { fontSize: 13, fontFamily: fonts.bodyBold, color: colors.body, marginTop: 4 },
-  input: {
-    borderWidth: 1,
-    borderColor: colors.inputBorder,
-    borderRadius: radius.md,
-    padding: 12,
-    fontSize: 16,
-    backgroundColor: colors.card,
-    color: colors.text,
-  },
+  form: { gap: spacing.md, paddingBottom: spacing.xl },
+  footer: { gap: spacing.sm },
   toggleRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingVertical: 4,
+    gap: spacing.md,
+    minHeight: layout.minTouch,
   },
-  toggleLabel: { fontSize: 15, color: colors.body },
-  button: {
-    backgroundColor: colors.primary,
-    borderRadius: radius.md,
-    padding: 14,
-    alignItems: 'center',
-  },
-  secondaryButton: {
-    backgroundColor: colors.primarySoft,
-    borderWidth: 2,
-    borderColor: colors.primary,
-  },
-  secondaryButtonText: { color: colors.primaryDark, fontSize: 16, fontWeight: '600' },
-  buttonText: { color: colors.onPrimary, fontSize: 16, fontWeight: '600' },
-  cancelWrap: { alignSelf: 'center', paddingVertical: 12, marginTop: 4 },
-  cancel: { textAlign: 'center', color: colors.body, fontSize: 14 },
+  toggleLabel: { flex: 1 },
 });

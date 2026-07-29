@@ -17,7 +17,7 @@ export default function Index() {
           alignItems: 'center',
           backgroundColor: colors.bg,
         }}>
-        <ActivityIndicator size="large" color={colors.primary} />
+        <ActivityIndicator size="large" color={colors.primaryInk} />
       </View>
     );
   }

@@ -1,17 +1,22 @@
+import { Feather } from '@expo/vector-icons';
 import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { useCallback, useState } from 'react';
-import {
-  ActivityIndicator,
-  Alert,
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  View,
-} from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { Alert, StyleSheet, View } from 'react-native';
 
+import {
+  Button,
+  Card,
+  Field,
+  ListState,
+  Row,
+  Screen,
+  ScreenHeader,
+  SectionLabel,
+  Tag,
+  Text,
+  type CardTone,
+  type TextColor,
+} from '@/components/ui';
 import { useAuth } from '@/lib/auth-context';
 import { postSystemMessage, sendPaymentRequest } from '@/lib/chat';
 import { friendlyError } from '@/lib/errors';
@@ -25,29 +30,23 @@ import {
   type OrderRow,
   type OrderStatus,
 } from '@/lib/orders';
-import { PAYMENT_METHOD_LABEL } from '@/lib/status-ui';
-import { colors, fonts, radius, scrollWrap } from '@/lib/theme';
+import { PAYMENT_BADGE, PAYMENT_METHOD_LABEL } from '@/lib/status-ui';
+import { colors, spacing } from '@/lib/theme';
 
-// Full-width status banner (more descriptive than the list chips).
-const STATUS_BANNER: Record<OrderStatus, { label: string; bg: string; fg: string }> = {
-  pending: { label: 'Menunggu konfirmasi', bg: colors.amberBg, fg: colors.amberText },
-  accepted: { label: 'Sedang diproses', bg: colors.infoBg, fg: colors.info },
-  ready: { label: 'Siap diambil / diantar', bg: colors.tealBg, fg: colors.teal },
-  completed: { label: 'Pesanan selesai', bg: colors.primaryChipBg, fg: colors.primaryDark },
-  rejected: { label: 'Pesanan ditolak', bg: colors.dangerBg, fg: colors.dangerDark },
-  cancelled: { label: 'Pesanan dibatalkan', bg: colors.dangerBg, fg: colors.dangerDark },
-};
-
-const PAYMENT_STATUS_LABEL: Record<string, { label: string; color: string }> = {
-  pending: { label: 'Belum dibayar', color: colors.amberText },
-  paid: { label: 'Lunas', color: colors.primaryDark },
-  voided: { label: 'Tidak perlu dibayar', color: colors.secondary },
+// Full-width status banner (more descriptive than the list chips). It carries
+// a tone, not raw hex — the Card and the Text both read from it.
+const STATUS_BANNER: Record<OrderStatus, { label: string; tone: CardTone; ink: TextColor }> = {
+  pending: { label: 'Menunggu konfirmasi', tone: 'warn', ink: 'warn' },
+  accepted: { label: 'Sedang diproses', tone: 'success', ink: 'primaryInk' },
+  ready: { label: 'Siap diambil / diantar', tone: 'success', ink: 'primaryInk' },
+  completed: { label: 'Pesanan selesai', tone: 'success', ink: 'primaryInk' },
+  rejected: { label: 'Pesanan ditolak', tone: 'danger', ink: 'danger' },
+  cancelled: { label: 'Pesanan dibatalkan', tone: 'danger', ink: 'danger' },
 };
 
 const REJECT_PRESETS = ['Stok habis', 'Toko tutup'];
 
 export default function SellerOrderDetail() {
-  const insets = useSafeAreaInsets();
   const { orderId } = useLocalSearchParams<{ orderId: string }>();
   const { profile } = useAuth();
   const [order, setOrder] = useState<OrderRow | null>(null);
@@ -87,8 +86,8 @@ export default function SellerOrderDetail() {
   const submitReason = async () => {
     if (!orderId || !profile || !reasonMode) return;
     const r = reason.trim();
-    if (!r) {
-      Alert.alert('NgomongAja', 'Tulis alasannya dulu ya, biar pembeli tahu.');
+    if (r.length < 5) {
+      Alert.alert('NgomongAja', 'Alasan minimal 5 karakter ya.');
       return;
     }
     setBusy(true);
@@ -166,349 +165,224 @@ export default function SellerOrderDetail() {
 
   if (!order || !items) {
     return (
-      <View style={styles.center}>
-        <ActivityIndicator size="large" color={colors.primary} />
-      </View>
+      <Screen centered>
+        <ListState state="loading" message="Memuat pesanan…" />
+      </Screen>
     );
   }
 
   const banner = STATUS_BANNER[order.status];
   const pay = order.payments[0];
-  const payStatus = pay ? PAYMENT_STATUS_LABEL[pay.status] : null;
+  const payStatus = pay ? PAYMENT_BADGE[pay.status] : null;
   const orderAlive = ['pending', 'accepted', 'ready', 'completed'].includes(order.status);
   const showPaymentTools = !!pay && pay.status === 'pending' && orderAlive;
   const subtotal = order.total - order.delivery_fee;
 
-  return (
-    <ScrollView
-      contentContainerStyle={[styles.container, { paddingTop: insets.top + 12 }]}
-      keyboardShouldPersistTaps="handled">
-      <Pressable onPress={() => router.back()} hitSlop={12} style={styles.backWrap}>
-        <Text style={styles.back}>‹ Pesanan</Text>
-      </Pressable>
-      <Text style={styles.title}>Detail Pesanan</Text>
+  // The one forward-moving action for this status — it lives in the footer.
+  const primaryAction =
+    order.status === 'pending'
+      ? { label: 'Terima', icon: 'check' as const, onPress: () => setStatus('accepted') }
+      : order.status === 'accepted'
+        ? { label: 'Siap', icon: 'package' as const, onPress: () => setStatus('ready') }
+        : order.status === 'ready'
+          ? { label: 'Selesai', icon: 'check-circle' as const, onPress: complete }
+          : null;
 
-      <View style={[styles.banner, { backgroundColor: banner.bg }]}>
-        <Text style={[styles.bannerText, { color: banner.fg }]}>{banner.label}</Text>
-      </View>
+  // The destructive counterpart, kept out of the footer so it can't be hit
+  // by muscle memory.
+  const killAction =
+    order.status === 'pending'
+      ? { label: 'Tolak', mode: 'reject' as const }
+      : order.status === 'accepted'
+        ? { label: 'Batalkan', mode: 'cancel' as const }
+        : order.status === 'ready'
+          ? { label: 'Batalkan (pembeli tidak datang)', mode: 'cancel' as const }
+          : null;
+
+  return (
+    <Screen
+      scroll
+      keyboard
+      contentContainerStyle={styles.content}
+      footer={
+        !reasonMode && primaryAction ? (
+          <Button
+            label={primaryAction.label}
+            icon={primaryAction.icon}
+            onPress={primaryAction.onPress}
+            loading={busy}
+          />
+        ) : undefined
+      }>
+      <ScreenHeader title="Detail Pesanan" backLabel="Pesanan" />
+
+      <Card tone={banner.tone}>
+        <Text variant="bodyStrong" color={banner.ink} accessibilityLiveRegion="polite">
+          {banner.label}
+        </Text>
+      </Card>
 
       {/* Buyer: name + phone, big — the seller often needs to call. */}
-      <View style={styles.card}>
-        <Text style={styles.cardLabel}>Pembeli</Text>
-        <Text style={styles.buyerName}>{order.buyer?.full_name ?? 'Pembeli'}</Text>
-        <Text style={styles.buyerPhone}>{order.buyer?.phone ?? 'Nomor HP tidak ada'}</Text>
-      </View>
+      <SectionLabel first>Pembeli</SectionLabel>
+      <Card gap={spacing.xs}>
+        <Text variant="title" color="text">
+          {order.buyer?.full_name ?? 'Pembeli'}
+        </Text>
+        <Text variant="subtitle" color="body">
+          {order.buyer?.phone ?? 'Nomor HP tidak ada'}
+        </Text>
+      </Card>
 
-      {order.fulfillment === 'delivery' && (
-        <View style={styles.addressBox}>
-          <Text style={styles.addressLabel}>🛵 Diantar ke alamat</Text>
-          <Text style={styles.addressText}>
-            {order.delivery_address ?? 'Alamat tidak tersedia'}
-          </Text>
-        </View>
-      )}
-      {order.fulfillment === 'pickup' && (
-        <View style={styles.card}>
-          <Text style={styles.cardLabel}>Pengambilan</Text>
-          <Text style={styles.cardValue}>🏪 Ambil sendiri di toko</Text>
-        </View>
+      <SectionLabel>Pengambilan</SectionLabel>
+      {order.fulfillment === 'delivery' ? (
+        <Card tone="success">
+          <Row
+            title="Diantar ke alamat"
+            meta={order.delivery_address ?? 'Alamat tidak tersedia'}
+            leading={<Feather name="truck" size={20} color={colors.successInk} />}
+          />
+        </Card>
+      ) : (
+        <Card>
+          <Row
+            title="Ambil sendiri di toko"
+            meta="Pembeli datang ke toko"
+            leading={<Feather name="home" size={20} color={colors.body} />}
+          />
+        </Card>
       )}
 
-      {/* Items */}
-      <View style={styles.card}>
-        <Text style={styles.cardLabel}>Barang</Text>
+      <SectionLabel>Barang</SectionLabel>
+      <Card>
         {items.map((it, idx) => (
-          <View key={idx} style={styles.itemRow}>
-            <Text style={styles.itemName}>
-              {it.products?.name ?? 'Barang'} × {it.quantity}
-            </Text>
-            <Text style={styles.itemPrice}>{formatRupiah(it.unit_price * it.quantity)}</Text>
-          </View>
+          <Row
+            key={idx}
+            title={`${it.products?.name ?? 'Barang'} × ${it.quantity}`}
+            value={formatRupiah(it.unit_price * it.quantity)}
+          />
         ))}
-        <View style={styles.divider} />
-        <View style={styles.itemRow}>
-          <Text style={styles.itemName}>Subtotal</Text>
-          <Text style={styles.itemPrice}>{formatRupiah(subtotal)}</Text>
-        </View>
+        <Row title="Subtotal" value={formatRupiah(subtotal)} />
         {order.delivery_fee > 0 && (
-          <View style={styles.itemRow}>
-            <Text style={styles.itemName}>Ongkir</Text>
-            <Text style={styles.itemPrice}>{formatRupiah(order.delivery_fee)}</Text>
-          </View>
+          <Row title="Ongkir" value={formatRupiah(order.delivery_fee)} />
         )}
-        <View style={styles.itemRow}>
-          <Text style={styles.totalLabel}>Total</Text>
-          <Text style={styles.totalValue}>{formatRupiah(order.total)}</Text>
-        </View>
-      </View>
+        <Row title="Total" value={formatRupiah(order.total)} emphasis="total" />
+      </Card>
 
-      {/* Payment */}
-      <View style={styles.card}>
-        <Text style={styles.cardLabel}>Pembayaran</Text>
-        <View style={styles.itemRow}>
-          <Text style={styles.cardValue}>{pay ? PAYMENT_METHOD_LABEL[pay.method] : '—'}</Text>
-          {payStatus && (
-            <Text style={[styles.payStatus, { color: payStatus.color }]}>{payStatus.label}</Text>
-          )}
-        </View>
-        <Text style={styles.demoNote}>DEMO — tidak ada uang berpindah</Text>
-      </View>
+      <SectionLabel>Pembayaran</SectionLabel>
+      <Card>
+        <Row
+          title={pay ? PAYMENT_METHOD_LABEL[pay.method] : '—'}
+          trailing={payStatus ? <Tag label={payStatus.label} tone={payStatus.tone} /> : undefined}
+        />
+        {pay?.status === 'voided' && !!payStatus?.note && (
+          <Text variant="meta" color="secondary">
+            {payStatus.note}
+          </Text>
+        )}
+        <Text variant="meta" color="secondary">
+          DEMO — tidak ada uang berpindah
+        </Text>
+      </Card>
 
       {/* Reason panel (reject / cancel) */}
       {reasonMode && (
-        <View style={styles.reasonBox}>
-          <Text style={styles.reasonTitle}>
+        <Card tone="danger" gap={spacing.md} style={styles.block}>
+          <Text variant="bodyStrong" color="danger">
             {reasonMode === 'reject' ? 'Alasan menolak pesanan' : 'Alasan membatalkan pesanan'}
           </Text>
           {reasonMode === 'reject' && (
             <View style={styles.presetRow}>
               {REJECT_PRESETS.map((p) => (
-                <Pressable key={p} style={styles.presetChip} onPress={() => setReason(p)}>
-                  <Text style={styles.presetChipText}>{p}</Text>
-                </Pressable>
+                <Button
+                  key={p}
+                  label={p}
+                  variant="quiet"
+                  size="md"
+                  fullWidth={false}
+                  onPress={() => setReason(p)}
+                />
               ))}
             </View>
           )}
-          <TextInput
-            style={styles.reasonInput}
+          <Field
+            multiline
             placeholder="Tulis alasan untuk pembeli…"
             value={reason}
             onChangeText={setReason}
-            multiline
+            accessibilityLabel="Alasan untuk pembeli"
           />
-          <Pressable style={styles.dangerButton} onPress={submitReason} disabled={busy}>
-            {busy ? (
-              <ActivityIndicator color="#fff" />
-            ) : (
-              <Text style={styles.dangerButtonText}>
-                {reasonMode === 'reject' ? 'Tolak Pesanan' : 'Batalkan Pesanan'}
-              </Text>
-            )}
-          </Pressable>
-          <Pressable
+          <Button
+            label={reasonMode === 'reject' ? 'Tolak Pesanan' : 'Batalkan Pesanan'}
+            variant="destructive"
+            onPress={submitReason}
+            loading={busy}
+          />
+          <Button
+            label="Tidak jadi"
+            variant="quiet"
+            size="md"
             onPress={() => {
               setReasonMode(null);
               setReason('');
-            }}>
-            <Text style={styles.cancelLink}>Tidak jadi</Text>
-          </Pressable>
-        </View>
+            }}
+          />
+        </Card>
       )}
 
-      {/* Actions per status */}
+      {/* Secondary actions per status */}
       {!reasonMode && (
         <View style={styles.actions}>
-          {order.status === 'pending' && (
-            <>
-              <Pressable
-                style={styles.primaryButton}
-                onPress={() => setStatus('accepted')}
-                disabled={busy}>
-                {busy ? (
-                  <ActivityIndicator color="#fff" />
-                ) : (
-                  <Text style={styles.primaryButtonText}>✅ Terima</Text>
-                )}
-              </Pressable>
-              <Pressable
-                style={styles.dangerOutlineButton}
-                onPress={() => setReasonMode('reject')}
-                disabled={busy}>
-                <Text style={styles.dangerOutlineText}>❌ Tolak</Text>
-              </Pressable>
-            </>
-          )}
-
-          {order.status === 'accepted' && (
-            <>
-              <Pressable
-                style={styles.primaryButton}
-                onPress={() => setStatus('ready')}
-                disabled={busy}>
-                {busy ? (
-                  <ActivityIndicator color="#fff" />
-                ) : (
-                  <Text style={styles.primaryButtonText}>📦 Siap</Text>
-                )}
-              </Pressable>
-              <Pressable
-                style={styles.dangerOutlineButton}
-                onPress={() => setReasonMode('cancel')}
-                disabled={busy}>
-                <Text style={styles.dangerOutlineText}>Batalkan</Text>
-              </Pressable>
-            </>
-          )}
-
-          {order.status === 'ready' && (
-            <>
-              <Pressable style={styles.primaryButton} onPress={complete} disabled={busy}>
-                {busy ? (
-                  <ActivityIndicator color="#fff" />
-                ) : (
-                  <Text style={styles.primaryButtonText}>🤝 Selesai</Text>
-                )}
-              </Pressable>
-              <Pressable
-                style={styles.dangerOutlineButton}
-                onPress={() => setReasonMode('cancel')}
-                disabled={busy}>
-                <Text style={styles.dangerOutlineText}>Batalkan (pembeli tidak datang)</Text>
-              </Pressable>
-            </>
-          )}
-
           {showPaymentTools && (
-            <>
-              <Pressable style={styles.amberButton} onPress={requestPayment} disabled={busy}>
-                <Text style={styles.amberButtonText}>💰 Minta Pembayaran</Text>
-              </Pressable>
-              {pay?.method === 'cash' && (
-                <Pressable style={styles.outlineButton} onPress={markPaid} disabled={busy}>
-                  <Text style={styles.outlineButtonText}>Tandai sudah dibayar</Text>
-                </Pressable>
-              )}
-            </>
+            <Button
+              label="Minta Pembayaran"
+              icon="dollar-sign"
+              variant="secondary"
+              size="md"
+              onPress={requestPayment}
+              disabled={busy}
+            />
+          )}
+          {showPaymentTools && pay?.method === 'cash' && (
+            <Button
+              label="Tandai sudah dibayar"
+              variant="quiet"
+              size="md"
+              onPress={markPaid}
+              disabled={busy}
+            />
           )}
 
-          <Pressable
-            style={styles.outlineButton}
+          <Button
+            label="Chat Pembeli"
+            icon="message-circle"
+            variant="secondary"
+            size="md"
             onPress={() =>
               router.push({
                 pathname: '/(seller)/order/[orderId]/chat',
                 params: { orderId: order.id },
               })
-            }>
-            <Text style={styles.outlineButtonText}>💬 Chat Pembeli</Text>
-          </Pressable>
+            }
+          />
+
+          {killAction && (
+            <Button
+              label={killAction.label}
+              variant="destructive"
+              size="md"
+              onPress={() => setReasonMode(killAction.mode)}
+              disabled={busy}
+            />
+          )}
         </View>
       )}
-    </ScrollView>
+    </Screen>
   );
 }
 
 const styles = StyleSheet.create({
-  center: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: colors.bg,
-  },
-  container: { ...scrollWrap, gap: 12 },
-  backWrap: { alignSelf: 'flex-start', paddingVertical: 12 },
-  back: { color: colors.primary, fontSize: 16, fontFamily: fonts.bodySemi },
-  title: { fontSize: 24, fontFamily: fonts.heading, color: colors.text },
-  banner: { borderRadius: radius.md, padding: 12, alignItems: 'center' },
-  bannerText: { fontSize: 15, fontWeight: '700' },
-  card: {
-    backgroundColor: colors.card,
-    borderRadius: radius.md,
-    padding: 14,
-    borderWidth: 1,
-    borderColor: colors.border,
-    gap: 4,
-  },
-  cardLabel: { fontSize: 12, color: colors.secondary, textTransform: 'uppercase', fontFamily: fonts.bodySemi },
-  cardValue: { fontSize: 15, color: colors.text },
-  demoNote: {
-    fontSize: 11,
-    fontFamily: fonts.bodyBold,
-    color: colors.amberText,
-    backgroundColor: colors.amberBg,
-    alignSelf: 'flex-start',
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 6,
-    overflow: 'hidden',
-    marginTop: 4,
-  },
-  buyerName: { fontSize: 18, fontWeight: '700' },
-  buyerPhone: { fontSize: 20, fontFamily: fonts.heading, color: colors.primaryDark },
-  addressBox: {
-    backgroundColor: '#f0fdf4',
-    borderRadius: radius.pill,
-    padding: 14,
-    borderWidth: 2,
-    borderColor: colors.primary,
-    gap: 4,
-  },
-  addressLabel: { fontSize: 13, fontFamily: fonts.bodyBold, color: colors.primaryDark },
-  addressText: { fontSize: 16, color: colors.primaryDeep, lineHeight: 22 },
-  itemRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  itemName: { fontSize: 15, color: '#333', flex: 1, marginRight: 8 },
-  itemPrice: { fontSize: 15, color: '#333' },
-  divider: { height: 1, backgroundColor: '#eee', marginVertical: 6 },
-  totalLabel: { fontSize: 16, fontWeight: '700' },
-  totalValue: { fontSize: 16, fontFamily: fonts.heading, color: colors.primaryDark },
-  payStatus: { fontSize: 14, fontWeight: '700' },
-  actions: { gap: 10, marginTop: 4 },
-  primaryButton: {
-    backgroundColor: colors.primary,
-    borderRadius: radius.pill,
-    padding: 14,
-    alignItems: 'center',
-  },
-  primaryButtonText: { color: '#fff', fontSize: 16, fontFamily: fonts.bodySemi },
-  dangerOutlineButton: {
-    backgroundColor: '#fff',
-    borderRadius: radius.pill,
-    padding: 14,
-    alignItems: 'center',
-    borderWidth: 2,
-    borderColor: '#dc2626',
-  },
-  dangerOutlineText: { color: '#dc2626', fontSize: 15, fontFamily: fonts.bodySemi },
-  amberButton: {
-    backgroundColor: '#fef3c7',
-    borderRadius: radius.pill,
-    padding: 14,
-    alignItems: 'center',
-    borderWidth: 1,
-    borderColor: '#fbbf24',
-  },
-  amberButtonText: { color: '#92400e', fontSize: 15, fontFamily: fonts.bodySemi },
-  outlineButton: {
-    backgroundColor: '#f0fdf4',
-    borderRadius: radius.pill,
-    padding: 14,
-    alignItems: 'center',
-    borderWidth: 2,
-    borderColor: colors.primary,
-  },
-  outlineButtonText: { color: colors.primaryDark, fontSize: 15, fontFamily: fonts.bodySemi },
-  reasonBox: {
-    backgroundColor: '#fff',
-    borderRadius: radius.pill,
-    padding: 14,
-    borderWidth: 2,
-    borderColor: '#dc2626',
-    gap: 10,
-  },
-  reasonTitle: { fontSize: 15, fontFamily: fonts.bodyBold, color: '#b91c1c' },
-  presetRow: { flexDirection: 'row', gap: 8, flexWrap: 'wrap' },
-  presetChip: {
-    backgroundColor: '#fee2e2',
-    borderRadius: 16,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-  },
-  presetChipText: { color: '#b91c1c', fontSize: 13, fontFamily: fonts.bodySemi },
-  reasonInput: {
-    borderWidth: 1,
-    borderColor: '#ccc',
-    borderRadius: radius.pill,
-    padding: 12,
-    fontSize: 15,
-    minHeight: 60,
-    textAlignVertical: 'top',
-    backgroundColor: '#fff',
-  },
-  dangerButton: {
-    backgroundColor: '#dc2626',
-    borderRadius: radius.pill,
-    padding: 14,
-    alignItems: 'center',
-  },
-  dangerButtonText: { color: '#fff', fontSize: 15, fontFamily: fonts.bodySemi },
-  cancelLink: { textAlign: 'center', color: '#666', fontSize: 14 },
+  content: { gap: spacing.md, paddingBottom: spacing.xl },
+  block: { marginTop: spacing.lg },
+  presetRow: { flexDirection: 'row', gap: spacing.sm, flexWrap: 'wrap' },
+  actions: { gap: spacing.sm, marginTop: spacing.lg },
 });
