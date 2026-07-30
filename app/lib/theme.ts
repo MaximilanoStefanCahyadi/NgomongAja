@@ -183,11 +183,9 @@ export const layout = {
  */
 export const gutterFor = (width: number) => (width <= 360 ? spacing.lg : layout.gutter);
 
-// ── Elevation: TWO recipes. Everything else is flat. ────────────────────
+// ── Elevation: ONE recipe. Everything else is flat. ─────────────────────
 // A shadow on warm paper reads as a smudge, not as lift — so it is spent
-// only where it earns its place: the mic (the app's most important control)
-// and the auth medallion (where the shadow is the only thing separating a
-// cream circle from a cream page). Nothing else gets one.
+// on the single most important control in the app and nothing else.
 export const elevation = {
   none: {},
   /** The mic control, and nothing else. */
@@ -197,19 +195,6 @@ export const elevation = {
     shadowRadius: 12,
     shadowOffset: { width: 0, height: 4 },
     elevation: 6,
-  },
-  /**
-   * The auth medallion, and nothing else. It is the one element whose fill
-   * (colors.bg) is identical to the surface behind it, so without a shadow
-   * its lower half has literally no edge — 1.00:1. Stronger than `raised`
-   * because here the shadow IS the boundary, not just lift.
-   */
-  medallion: {
-    shadowColor: colors.shadow,
-    shadowOpacity: 0.22,
-    shadowRadius: 14,
-    shadowOffset: { width: 0, height: 6 },
-    elevation: 10,
   },
   /** Sticky footers/headers separate with a hairline, not a shadow. */
   bar: {

@@ -99,6 +99,51 @@ export async function listMyOrders(buyerId: string): Promise<OrderRow[]> {
   return data as unknown as OrderRow[];
 }
 
+/** One warung the buyer has ordered from before — the "Pesan lagi" rail. */
+export type RecentStore = { id: string; name: string };
+
+/**
+ * Distinct warungs this buyer has ordered from, newest first.
+ *
+ * Deliberately NOT listMyOrders: that uses ORDER_SELECT, which joins stores,
+ * profiles, payments, and order_items→products for every order the buyer has
+ * ever placed — with no limit. The rail needs a store id and a name. On a
+ * regular customer with a few hundred orders that was several hundred rows
+ * and four joins to render eight chips.
+ *
+ * The row cap exists because PostgREST cannot express DISTINCT ON, so the
+ * de-duplication happens here. 60 recent orders is far more than enough to
+ * find `limit` distinct warungs for anyone who is not ordering from a
+ * different shop every single time.
+ */
+export async function listRecentOrderStores(
+  buyerId: string,
+  limit = 8
+): Promise<RecentStore[]> {
+  const { data, error } = await supabase
+    .from('orders')
+    .select('store_id, stores(name)')
+    .eq('buyer_id', buyerId)
+    .order('created_at', { ascending: false })
+    .limit(60);
+  if (error) throw error;
+
+  const rows = (data ?? []) as unknown as {
+    store_id: string;
+    stores: { name: string } | null;
+  }[];
+
+  const seen = new Set<string>();
+  const out: RecentStore[] = [];
+  for (const row of rows) {
+    if (!row.stores?.name || seen.has(row.store_id)) continue;
+    seen.add(row.store_id);
+    out.push({ id: row.store_id, name: row.stores.name });
+    if (out.length === limit) break;
+  }
+  return out;
+}
+
 export async function listStoreOrders(storeId: string): Promise<OrderRow[]> {
   const { data, error } = await supabase
     .from('orders')

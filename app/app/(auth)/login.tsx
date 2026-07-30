@@ -99,9 +99,8 @@ export default function Login() {
 const styles = StyleSheet.create({
   // No top padding: the dome runs under the status bar and owns the inset.
   page: { paddingTop: 0, gap: spacing.md },
-  // The intro block used to space the form off the toggle; it is gone, so
-  // the first field carries that gap itself.
-  firstField: { marginTop: spacing.lg },
+  // Just enough to clear the toggle — the form should start high.
+  firstField: { marginTop: spacing.sm },
   submit: { marginTop: spacing.sm },
   linkWrap: {
     alignSelf: 'center',

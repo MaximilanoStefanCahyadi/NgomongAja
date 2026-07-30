@@ -2,31 +2,39 @@ import { Feather } from '@expo/vector-icons';
 import * as Location from 'expo-location';
 import { router } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
-import { FlatList, Linking, Pressable, RefreshControl, StyleSheet, View } from 'react-native';
-
 import {
-  Card,
-  IconButton,
-  ListState,
-  Row,
-  Screen,
-  ScreenHeader,
-  SectionLabel,
-  Text,
-} from '@/components/ui';
+  FlatList,
+  Linking,
+  Pressable,
+  RefreshControl,
+  ScrollView,
+  StyleSheet,
+  View,
+} from 'react-native';
+
+import { RotatingGreeting } from '@/components/rotating-greeting';
+import { ListState, Row, Screen, SectionLabel, Tag, Text } from '@/components/ui';
 import { useAuth } from '@/lib/auth-context';
-import { showLocalNotification } from '@/lib/notifications';
+import { friendlyError } from '@/lib/errors';
+import { formatRupiah } from '@/lib/format';
+import { showLocalNotification, unreadCount } from '@/lib/notifications';
+import { listRecentOrderStores, type RecentStore } from '@/lib/orders';
+import { finalPrice, listDiscountedProducts, type DiscountedProduct } from '@/lib/products';
 import { listNearbyStores, type NearbyStore } from '@/lib/stores';
 import { supabase } from '@/lib/supabase';
-import { colors, elevation, radius, spacing } from '@/lib/theme';
+import { colors, layout, radius, spacing } from '@/lib/theme';
 
 function formatDistance(km: number): string {
   return km < 1 ? `${Math.round(km * 1000)} m` : `${km.toFixed(1).replace('.', ',')} km`;
 }
 
+
 export default function BuyerHome() {
   const { profile } = useAuth();
   const [stores, setStores] = useState<NearbyStore[] | null>(null);
+  const [deals, setDeals] = useState<DiscountedProduct[]>([]);
+  const [again, setAgain] = useState<RecentStore[]>([]);
+  const [unread, setUnread] = useState(0);
   const [denied, setDenied] = useState(false);
   const [loadFailed, setLoadFailed] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
@@ -55,9 +63,11 @@ export default function BuyerHome() {
                 : s === 'completed'
                   ? 'Pesanan selesai. Terima kasih!'
                   : s === 'rejected'
-                    ? 'Maaf, pesananmu ditolak penjual.'
+                    ? 'Maaf, pesananmu belum bisa diterima.'
                     : null;
           if (label) showLocalNotification('NgomongAja', label);
+          // The inbox row is written by a database trigger; just refresh the badge.
+          unreadCount().then(setUnread).catch(() => {});
         }
       )
       .subscribe();
@@ -71,22 +81,51 @@ export default function BuyerHome() {
     if (status !== 'granted') {
       setDenied(true);
       setStores([]);
-      return;
+      return [] as NearbyStore[];
     }
     setDenied(false);
     const pos = await Location.getCurrentPositionAsync({});
     const nearby = await listNearbyStores(pos.coords.latitude, pos.coords.longitude);
     setStores(nearby);
+    return nearby;
+  }, []);
+
+  // Neither of these needs the buyer's location, so they must not queue behind
+  // the GPS fix — that can take seconds on a cold start, and the bell badge and
+  // "Pesan lagi" rail can be on screen long before the warung list is.
+  const loadLocationFree = useCallback(() => {
+    unreadCount()
+      .then(setUnread)
+      .catch(() => {});
+
+    if (profile) {
+      listRecentOrderStores(profile.id)
+        .then(setAgain)
+        .catch((e) => console.warn('listRecentOrderStores:', e.message));
+    }
+  }, [profile]);
+
+  // Discounts are scoped to the warungs actually near the buyer, so this one
+  // genuinely has to wait for the nearby list.
+  const loadDeals = useCallback((nearby: NearbyStore[]) => {
+    listDiscountedProducts(nearby.map((s) => s.id))
+      .then(setDeals)
+      .catch((e) => console.warn('listDiscountedProducts:', e.message));
   }, []);
 
   const load = useCallback(() => {
     setLoadFailed(false);
-    loadNearby().catch((e) => {
-      console.warn('loadNearby:', e.message);
-      setLoadFailed(true);
-      setStores([]);
-    });
-  }, [loadNearby]);
+    // Fired together, not chained: the rails are decoration around the warung
+    // list, and a failing rail must never take the page down with it.
+    loadLocationFree();
+    loadNearby()
+      .then(loadDeals)
+      .catch((e) => {
+        console.warn('loadNearby:', e.message);
+        setLoadFailed(true);
+        setStores([]);
+      });
+  }, [loadNearby, loadDeals, loadLocationFree]);
 
   useEffect(() => {
     load();
@@ -94,22 +133,45 @@ export default function BuyerHome() {
 
   const onRefresh = async () => {
     setRefreshing(true);
-    setLoadFailed(false);
-    await loadNearby().catch(() => setLoadFailed(true));
+    try {
+      loadLocationFree();
+      loadDeals(await loadNearby());
+      setLoadFailed(false);
+    } catch {
+      setLoadFailed(true);
+    }
     setRefreshing(false);
   };
 
-  const nearest = stores?.[0];
+  const openStore = (id: string) =>
+    router.push({ pathname: '/(buyer)/store/[id]', params: { id } });
 
-  // The hero banner starts a voice order at the NEAREST warung.
-  const startVoiceOrder = () => {
-    if (!nearest) return;
-    router.push({ pathname: '/(buyer)/store/[id]/order', params: { id: nearest.id } });
-  };
+  const header = (
+    <View style={styles.header}>
+      <RotatingGreeting name={profile?.full_name?.split(' ')[0]} />
+      <Pressable
+        onPress={() => router.push('/(buyer)/notifications')}
+        accessibilityRole="button"
+        accessibilityLabel={
+          unread > 0 ? `Pemberitahuan, ${unread} belum dibaca` : 'Pemberitahuan'
+        }
+        style={styles.bell}>
+        <Feather name="bell" size={22} color={colors.text} />
+        {unread > 0 && (
+          <View style={styles.badge}>
+            <Text variant="tag" color="onPrimary">
+              {unread > 9 ? '9+' : String(unread)}
+            </Text>
+          </View>
+        )}
+      </Pressable>
+    </View>
+  );
 
   if (!stores) {
     return (
-      <Screen centered>
+      <Screen>
+        {header}
         <ListState state="loading" message="Mencari warung di sekitarmu…" />
       </Screen>
     );
@@ -117,142 +179,208 @@ export default function BuyerHome() {
 
   return (
     <Screen>
-      <ScreenHeader
-        title="Toko Terdekat"
-        subtitle={profile?.full_name ? `Halo, ${profile.full_name}` : undefined}
-        right={
-          <View style={styles.headerActions}>
-            <IconButton
-              icon="clipboard"
-              accessibilityLabel="Pesanan saya"
-              onPress={() => router.push('/(buyer)/orders')}
-            />
-            <IconButton
-              icon="user"
-              accessibilityLabel="Profil saya"
-              onPress={() => router.push('/(buyer)/profile')}
-            />
-          </View>
-        }
-      />
-
-      {nearest && (
-        <Pressable
-          style={({ pressed }) => [styles.hero, pressed && styles.heroPressed]}
-          onPress={startVoiceOrder}
-          accessibilityRole="button"
-          accessibilityLabel={`Pesan pakai suara di ${nearest.name}`}>
-          <View style={styles.heroMic}>
-            <Feather name="mic" size={24} color={colors.onPrimary} />
-          </View>
-          <View style={styles.heroText}>
-            <Text variant="title" color="onPrimary">
-              Ngomong Aja
-            </Text>
-            {/* Name the target warung — the old copy said "cukup bicara" and
-                silently ordered from whichever store happened to be first. */}
-            <Text variant="meta" color="onPrimarySoft" numberOfLines={1}>
-              Pesan di {nearest.name}
-            </Text>
-          </View>
-          <Feather name="chevron-right" size={20} color={colors.onPrimarySoft} />
-        </Pressable>
-      )}
-
-      <SectionLabel>Pilih warung</SectionLabel>
+      {header}
 
       <FlatList
         data={stores}
         keyExtractor={(s) => s.id}
-        contentContainerStyle={styles.list}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
+        showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            tintColor={colors.primaryInk}
+          />
+        }
+        ListHeaderComponent={
+          <View>
+            <Pressable
+              onPress={() => router.push('/(buyer)/search')}
+              accessibilityRole="search"
+              accessibilityLabel="Cari warung"
+              style={styles.searchBox}>
+              <Feather name="search" size={18} color={colors.secondary} />
+              <Text variant="body" color="secondary">
+                Cari warung…
+              </Text>
+            </Pressable>
+
+            {deals.length > 0 && (
+              <>
+                <SectionLabel first>Lagi diskon</SectionLabel>
+                <ScrollView
+                  horizontal
+                  showsHorizontalScrollIndicator={false}
+                  contentContainerStyle={styles.rail}>
+                  {deals.map((p) => (
+                    <Pressable
+                      key={p.id}
+                      onPress={() => openStore(p.store_id)}
+                      accessibilityRole="button"
+                      accessibilityLabel={`${p.name}, diskon ${p.discount_percent} persen, sekarang ${formatRupiah(finalPrice(p))}, di ${p.stores?.name ?? 'warung'}`}
+                      style={styles.dealCard}>
+                      <View style={styles.dealTop}>
+                        <Tag tone="danger" label={`-${p.discount_percent}%`} />
+                      </View>
+                      <Text variant="bodyStrong" numberOfLines={2}>
+                        {p.name}
+                      </Text>
+                      <Text variant="money" color="danger">
+                        {formatRupiah(finalPrice(p))}
+                      </Text>
+                      {/* The struck-through original is backed up by the "-N%"
+                          tag, so the saving is never carried by styling alone. */}
+                      <Text variant="tag" color="secondary" style={styles.strike}>
+                        {formatRupiah(p.price)}
+                      </Text>
+                      <Text variant="tag" color="secondary" numberOfLines={1}>
+                        {p.stores?.name ?? ''}
+                      </Text>
+                    </Pressable>
+                  ))}
+                </ScrollView>
+              </>
+            )}
+
+            {again.length > 0 && (
+              <>
+                <SectionLabel>Pesan lagi</SectionLabel>
+                <ScrollView
+                  horizontal
+                  showsHorizontalScrollIndicator={false}
+                  contentContainerStyle={styles.rail}>
+                  {again.map((s) => (
+                    <Pressable
+                      key={s.id}
+                      onPress={() => openStore(s.id)}
+                      accessibilityRole="button"
+                      accessibilityLabel={`Pesan lagi di ${s.name}`}
+                      style={styles.againCard}>
+                      <View style={styles.againTile}>
+                        <Feather name="rotate-ccw" size={18} color={colors.primaryInk} />
+                      </View>
+                      <Text variant="bodyStrong" numberOfLines={2}>
+                        {s.name}
+                      </Text>
+                    </Pressable>
+                  ))}
+                </ScrollView>
+              </>
+            )}
+
+            <SectionLabel>Warung dekat kamu</SectionLabel>
+          </View>
+        }
+        renderItem={({ item }) => (
+          <Row
+            title={item.name}
+            meta={`${formatDistance(item.distance_km)} · ongkir ${formatRupiah(item.delivery_fee)}`}
+            onPress={() => openStore(item.id)}
+            leading={
+              <View style={styles.storeTile}>
+                <Text variant="bodyStrong" color="primaryInk">
+                  {item.name.trim().charAt(0).toUpperCase()}
+                </Text>
+              </View>
+            }
+          />
+        )}
         ListEmptyComponent={
-          loadFailed ? (
-            <ListState
-              state="error"
-              title="Gagal memuat"
-              message="Periksa koneksi internetmu, lalu coba lagi."
-              action={{ label: 'Coba Lagi', onPress: load }}
-            />
-          ) : denied ? (
+          denied ? (
             <ListState
               state="empty"
               icon="map-pin"
-              title="Izin lokasi dimatikan"
-              message="Aktifkan izin lokasi supaya kami bisa mencari warung di dekatmu."
+              title="Kami belum tahu kamu di mana"
+              message="Nyalakan izin lokasi supaya kami bisa tunjukkan warung terdekat."
               action={{ label: 'Buka Pengaturan', onPress: () => Linking.openSettings() }}
               secondaryAction={{ label: 'Coba Lagi', onPress: load }}
+            />
+          ) : loadFailed ? (
+            <ListState
+              state="error"
+              message={friendlyError('load failed')}
+              action={{ label: 'Coba Lagi', onPress: load }}
             />
           ) : (
             <ListState
               state="empty"
-              icon="map-pin"
+              icon="shopping-bag"
               title="Belum ada warung di dekatmu"
-              message="Tarik layar ke bawah untuk mencari lagi."
+              message="Coba lagi nanti ya."
             />
           )
         }
-        renderItem={({ item }) => (
-          <Card
-            onPress={() =>
-              router.push({ pathname: '/(buyer)/store/[id]', params: { id: item.id } })
-            }
-            padding="sm"
-            accessibilityLabel={`${item.name}, ${formatDistance(item.distance_km)}`}>
-            <Row
-              title={item.name}
-              meta={item.description || undefined}
-              leading={
-                // One neutral thumbnail treatment. The old code rotated
-                // green/orange/neutral by row index, which made green stop
-                // meaning "good" anywhere else on the screen.
-                <View style={styles.thumb}>
-                  <Text variant="title" color="body">
-                    {item.name.trim().charAt(0).toUpperCase()}
-                  </Text>
-                </View>
-              }
-              trailing={
-                <Text variant="meta" color="secondary">
-                  {formatDistance(item.distance_km)}
-                </Text>
-              }
-            />
-          </Card>
-        )}
       />
     </Screen>
   );
 }
 
 const styles = StyleSheet.create({
-  headerActions: { flexDirection: 'row', gap: spacing.sm },
-  list: { gap: spacing.sm, paddingBottom: spacing.xl },
-  hero: {
-    marginTop: spacing.lg,
-    backgroundColor: colors.primary,
-    borderRadius: radius.md,
-    padding: spacing.lg,
+  header: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: spacing.md,
-    ...elevation.none,
+    gap: spacing.sm,
+    paddingBottom: spacing.sm,
   },
-  heroPressed: { backgroundColor: colors.primaryDark },
-  heroMic: {
-    width: 48,
-    height: 48,
-    borderRadius: radius.pill,
-    backgroundColor: 'rgba(255,255,255,.18)',
+  bell: {
+    width: layout.minTouch,
+    height: layout.minTouch,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  heroText: { flex: 1, minWidth: 0, gap: 2 },
-  thumb: {
-    width: 48,
-    height: 48,
-    borderRadius: radius.xs,
-    backgroundColor: colors.neutralBg,
+  badge: {
+    position: 'absolute',
+    top: 4,
+    right: 2,
+    minWidth: 20,
+    height: 20,
+    paddingHorizontal: 5,
+    borderRadius: radius.pill,
+    backgroundColor: colors.primary,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  searchBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    minHeight: layout.minTouch,
+    paddingHorizontal: spacing.md,
+    borderRadius: radius.sm,
+    backgroundColor: colors.card,
+    borderWidth: layout.hairline,
+    borderColor: colors.border,
+  },
+  rail: { gap: spacing.sm, paddingVertical: spacing.xs, paddingRight: spacing.lg },
+  dealCard: {
+    width: 150,
+    gap: spacing.xs,
+    padding: spacing.md,
+    borderRadius: radius.md,
+    backgroundColor: colors.card,
+  },
+  dealTop: { flexDirection: 'row' },
+  strike: { textDecorationLine: 'line-through' },
+  againCard: {
+    width: 140,
+    gap: spacing.sm,
+    padding: spacing.md,
+    borderRadius: radius.md,
+    backgroundColor: colors.card,
+  },
+  againTile: {
+    width: 36,
+    height: 36,
+    borderRadius: radius.sm,
+    backgroundColor: colors.primarySoft,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  storeTile: {
+    width: 44,
+    height: 44,
+    borderRadius: radius.sm,
+    backgroundColor: colors.primarySoft,
     alignItems: 'center',
     justifyContent: 'center',
   },

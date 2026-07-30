@@ -3,6 +3,7 @@
 
 export { AuthHeader, type AuthHeaderProps } from './auth-header';
 export { Button, type ButtonProps, type ButtonVariant } from './button';
+export { BuyerTabBar, type BuyerTabBarProps } from './buyer-tab-bar';
 export { Card, type CardProps, type CardTone } from './card';
 export { Field, type FieldProps } from './field';
 export { IconButton, type IconButtonProps } from './icon-button';

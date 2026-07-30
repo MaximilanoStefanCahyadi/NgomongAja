@@ -373,9 +373,8 @@ export default function Register() {
 const styles = StyleSheet.create({
   // No top padding: the dome runs under the status bar and owns the inset.
   page: { paddingTop: 0, gap: spacing.md },
-  // The intro block used to space the form off the toggle; it is gone, so
-  // the first label carries that gap itself.
-  firstLabel: { marginTop: spacing.lg },
+  // Just enough to clear the toggle — the form should start high.
+  firstLabel: { marginTop: spacing.sm },
   roles: { gap: spacing.sm },
   // Side by side. `alignItems: stretch` is the row default, so both cards
   // match the taller one's height without hardcoding it.

@@ -5,10 +5,11 @@ import { Alert, StyleSheet, Switch, TextInput, View } from 'react-native';
 
 import { Button, Card, Field, Screen, ScreenHeader, Text } from '@/components/ui';
 import { friendlyError } from '@/lib/errors';
-import { createProduct, listProducts, updateProduct } from '@/lib/products';
+import { formatRupiah } from '@/lib/format';
+import { createProduct, finalPrice, listProducts, updateProduct } from '@/lib/products';
 import { colors, layout, spacing } from '@/lib/theme';
 
-type Errors = Partial<Record<'name' | 'price' | 'stock', string>>;
+type Errors = Partial<Record<'name' | 'price' | 'stock' | 'discount', string>>;
 
 export default function ProductForm() {
   const { id: storeId, productId } = useLocalSearchParams<{
@@ -20,6 +21,7 @@ export default function ProductForm() {
   const [name, setName] = useState('');
   const [price, setPrice] = useState('');
   const [stock, setStock] = useState('');
+  const [discount, setDiscount] = useState('');
   const [isActive, setIsActive] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [errors, setErrors] = useState<Errors>({});
@@ -32,6 +34,15 @@ export default function ProductForm() {
     if (errors[key]) setErrors((e) => ({ ...e, [key]: undefined }));
   };
 
+  // Live "pembeli bayar X" preview under the discount field. Uses finalPrice —
+  // the same formula as public.discounted_price() on the server.
+  const previewBase = parseInt(price.replace(/\D/g, ''), 10) || 0;
+  const previewPct = parseInt(discount.replace(/\D/g, ''), 10) || 0;
+  const discountedPreview =
+    previewBase > 0 && previewPct > 0 && previewPct <= 90
+      ? formatRupiah(finalPrice({ price: previewBase, discount_percent: previewPct }))
+      : null;
+
   useEffect(() => {
     // Edit mode: load the existing product's values into the form.
     if (!isEdit || !storeId) return;
@@ -41,6 +52,7 @@ export default function ProductForm() {
       setName(p.name);
       setPrice(String(p.price));
       setStock(String(p.stock));
+      setDiscount(p.discount_percent ? String(p.discount_percent) : '');
       setIsActive(p.is_active);
     });
   }, [isEdit, productId, storeId]);
@@ -48,15 +60,27 @@ export default function ProductForm() {
   const parseForm = () => {
     const priceNum = parseInt(price.replace(/\D/g, ''), 10);
     const stockNum = parseInt(stock.replace(/\D/g, ''), 10);
+    // Blank means "no discount" — not an error.
+    const discountNum = discount.trim() ? parseInt(discount.replace(/\D/g, ''), 10) : 0;
     // Validation belongs next to the field that is wrong, not in an alert that
     // hides the form behind it.
     const next: Errors = {};
     if (!name.trim()) next.name = 'Isi nama barangnya ya.';
     if (isNaN(priceNum)) next.price = 'Isi harga dengan angka ya.';
     if (isNaN(stockNum)) next.stock = 'Isi stok dengan angka ya.';
+    // The database enforces 0–90 too; catching it here means the seller gets a
+    // sentence instead of a constraint violation.
+    if (isNaN(discountNum) || discountNum < 0 || discountNum > 90) {
+      next.discount = 'Diskon paling banyak 90%. Kosongkan kalau nggak ada diskon.';
+    }
     setErrors(next);
     if (Object.keys(next).length > 0) return null;
-    return { name: name.trim(), price: priceNum, stock: stockNum };
+    return {
+      name: name.trim(),
+      price: priceNum,
+      stock: stockNum,
+      discount_percent: discountNum,
+    };
   };
 
   const save = async (addAnother: boolean) => {
@@ -160,6 +184,27 @@ export default function ProductForm() {
           clear('stock');
         }}
         error={errors.stock}
+      />
+      <Field
+        label="Diskon (opsional)"
+        placeholder="Contoh: 15"
+        keyboardType="number-pad"
+        value={discount}
+        onChangeText={(t) => {
+          setDiscount(t);
+          clear('discount');
+        }}
+        error={errors.discount}
+        // Show the seller the number the buyer will actually be charged. The
+        // maths is the same formula the server uses, so there is no surprise
+        // at checkout.
+        hint={
+          errors.discount
+            ? undefined
+            : discountedPreview
+              ? `Pembeli bayar ${discountedPreview} (dari ${formatRupiah(previewBase)})`
+              : 'Isi angka persen, misal 15. Kosongkan kalau nggak ada diskon.'
+        }
       />
 
       {isEdit && (

@@ -42,10 +42,10 @@ Desktop.ini
 *~
 
 # env files (never commit secrets)
+# `.env*` rather than a list: the old patterns matched `.env` exactly, so a
+# stray `.env.backup` or `.env.old` would have been committed with real keys.
 .env
-.env*.local
-.env.production
-.env.staging
+.env*
 
 # typescript
 *.tsbuildinfo

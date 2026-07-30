@@ -41,6 +41,26 @@ export async function getStore(id: string): Promise<Store> {
   return data as Store;
 }
 
+/**
+ * Warung name search for the Cari tab. `ilike` is case-insensitive; the % are
+ * escaped so a buyer typing "%" searches for a literal percent rather than
+ * matching every warung in the country.
+ */
+export async function searchStores(query: string): Promise<Store[]> {
+  const q = query.trim();
+  if (!q) return [];
+  const escaped = q.replace(/[\\%_]/g, (m) => `\\${m}`);
+  const { data, error } = await supabase
+    .from('stores')
+    .select('*')
+    .eq('is_active', true)
+    .ilike('name', `%${escaped}%`)
+    .order('name', { ascending: true })
+    .limit(30);
+  if (error) throw error;
+  return data as Store[];
+}
+
 export async function createStore(ownerId: string, store: NewStore): Promise<Store> {
   const { data, error } = await supabase
     .from('stores')
