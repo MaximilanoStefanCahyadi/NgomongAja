@@ -31,7 +31,14 @@ import { friendlyError } from '@/lib/errors';
 import { formatRupiah } from '@/lib/format';
 import { listProducts, type Product } from '@/lib/products';
 import { addStorePhoto, listStorePhotos, type StorePhoto } from '@/lib/store-photos';
-import { getStore, setStoreActive, setStoreDeliveryFee, type Store } from '@/lib/stores';
+import { SPECIALTIES } from '@/lib/specialty';
+import {
+  getStore,
+  setStoreActive,
+  setStoreDeliveryFee,
+  setStoreSpecialty,
+  type Store,
+} from '@/lib/stores';
 import { colors, radius, spacing } from '@/lib/theme';
 
 export default function StoreInventory() {
@@ -99,6 +106,23 @@ export default function StoreInventory() {
     } catch (e) {
       setStore({ ...store, is_active: !value }); // roll back on failure
       Alert.alert('Gagal', friendlyError(e));
+    }
+  };
+
+  // Optimistic like the open/closed toggle above: the buyer's chips are
+  // cosmetic, so a slow network should not make tapping feel broken.
+  const toggleSpecialty = async (slug: string) => {
+    if (!store) return;
+    const previous = store.specialty ?? [];
+    const next = previous.includes(slug)
+      ? previous.filter((t) => t !== slug)
+      : [...previous, slug];
+    setStore({ ...store, specialty: next });
+    try {
+      await setStoreSpecialty(store.id, next);
+    } catch (e) {
+      setStore({ ...store, specialty: previous }); // roll back on failure
+      Alert.alert('Belum tersimpan', friendlyError(e));
     }
   };
 
@@ -208,6 +232,38 @@ export default function StoreInventory() {
         />
       )}
 
+      <View style={styles.specialtyBlock}>
+        <Text variant="label" color="body">
+          Warungmu terkenal apa?
+        </Text>
+        <Text variant="meta" color="secondary">
+          Pembeli pakai ini buat nyaring warung. Pilih yang pas, boleh lebih dari satu.
+        </Text>
+        <View style={styles.specialtyWrap}>
+          {SPECIALTIES.map((sp) => {
+            const on = store.specialty?.includes(sp.slug) ?? false;
+            return (
+              <Pressable
+                key={sp.slug}
+                onPress={() => toggleSpecialty(sp.slug)}
+                accessibilityRole="checkbox"
+                accessibilityState={{ checked: on }}
+                accessibilityLabel={sp.label}
+                style={[styles.specialtyChip, on && styles.specialtyChipOn]}>
+                <Feather
+                  name={on ? 'check' : sp.icon}
+                  size={14}
+                  color={on ? colors.primaryInk : colors.secondary}
+                />
+                <Text variant="tag" color={on ? 'primaryInk' : 'body'}>
+                  {sp.label}
+                </Text>
+              </Pressable>
+            );
+          })}
+        </View>
+      </View>
+
       <ScrollView
         horizontal
         showsHorizontalScrollIndicator={false}
@@ -307,6 +363,19 @@ export default function StoreInventory() {
 // Screen-specific layout only — every control above comes from the kit.
 const styles = StyleSheet.create({
   flex: { flex: 1 },
+  specialtyBlock: { gap: spacing.xs, marginTop: spacing.md },
+  specialtyWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm, marginTop: spacing.xs },
+  specialtyChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
+    minHeight: 36,
+    paddingHorizontal: spacing.md,
+    borderRadius: radius.pill,
+    backgroundColor: colors.neutralBg,
+  },
+  // Selected is fill + a check glyph, never fill alone.
+  specialtyChipOn: { backgroundColor: colors.primarySoft },
   toggleRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
   navRow: { flexDirection: 'row', gap: spacing.sm, marginTop: spacing.md },
   navButton: { flex: 1 },

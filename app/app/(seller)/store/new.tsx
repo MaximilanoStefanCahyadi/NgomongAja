@@ -1,3 +1,4 @@
+import { Feather } from '@expo/vector-icons';
 import * as Location from 'expo-location';
 import { router } from 'expo-router';
 import { useState } from 'react';
@@ -6,8 +7,9 @@ import { Alert, Pressable, StyleSheet, View } from 'react-native';
 import { Button, Field, Screen, ScreenHeader, Text } from '@/components/ui';
 import { useAuth } from '@/lib/auth-context';
 import { friendlyError } from '@/lib/errors';
+import { SPECIALTIES } from '@/lib/specialty';
 import { createStore } from '@/lib/stores';
-import { layout, spacing } from '@/lib/theme';
+import { colors, layout, radius, spacing } from '@/lib/theme';
 
 type Errors = Partial<Record<'name' | 'location', string>>;
 
@@ -16,6 +18,7 @@ export default function NewStore() {
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
   const [gmapsUrl, setGmapsUrl] = useState('');
+  const [specialty, setSpecialty] = useState<string[]>([]);
   const [coords, setCoords] = useState<{ lat: number; lng: number } | null>(null);
   const [locating, setLocating] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -64,6 +67,7 @@ export default function NewStore() {
         lat: coords?.lat,
         lng: coords?.lng,
         gmaps_url: gmapsUrl.trim() || undefined,
+        specialty,
       });
       // replace (not push): "back" from the store page should go to the list,
       // not return to this already-submitted form.
@@ -137,6 +141,42 @@ export default function NewStore() {
         />
       </View>
 
+      <View style={styles.specialtyBlock}>
+        <Text variant="label" color="body">
+          Warungmu terkenal apa? (opsional)
+        </Text>
+        <Text variant="meta" color="secondary">
+          Pembeli pakai ini buat nyaring warung. Bisa diubah nanti.
+        </Text>
+        <View style={styles.specialtyWrap}>
+          {SPECIALTIES.map((sp) => {
+            const on = specialty.includes(sp.slug);
+            return (
+              <Pressable
+                key={sp.slug}
+                onPress={() =>
+                  setSpecialty(
+                    on ? specialty.filter((t) => t !== sp.slug) : [...specialty, sp.slug]
+                  )
+                }
+                accessibilityRole="checkbox"
+                accessibilityState={{ checked: on }}
+                accessibilityLabel={sp.label}
+                style={[styles.specialtyChip, on && styles.specialtyChipOn]}>
+                <Feather
+                  name={on ? 'check' : sp.icon}
+                  size={14}
+                  color={on ? colors.primaryInk : colors.secondary}
+                />
+                <Text variant="tag" color={on ? 'primaryInk' : 'body'}>
+                  {sp.label}
+                </Text>
+              </Pressable>
+            );
+          })}
+        </View>
+      </View>
+
       <Pressable
         onPress={() => router.back()}
         style={styles.cancel}
@@ -153,6 +193,18 @@ export default function NewStore() {
 const styles = StyleSheet.create({
   form: { gap: spacing.md, paddingBottom: spacing.xl },
   locationGroup: { gap: spacing.sm },
+  specialtyBlock: { gap: spacing.xs },
+  specialtyWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm, marginTop: spacing.xs },
+  specialtyChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
+    minHeight: 36,
+    paddingHorizontal: spacing.md,
+    borderRadius: radius.pill,
+    backgroundColor: colors.neutralBg,
+  },
+  specialtyChipOn: { backgroundColor: colors.primarySoft },
   cancel: {
     alignSelf: 'center',
     minHeight: layout.minTouch,

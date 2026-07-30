@@ -9,10 +9,13 @@ import {
   RefreshControl,
   ScrollView,
   StyleSheet,
+  useWindowDimensions,
   View,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { RotatingGreeting } from '@/components/rotating-greeting';
+import { SpecialtyChip, StoreRail } from '@/components/store-rail';
 import { ListState, Row, Screen, SectionLabel, Tag, Text } from '@/components/ui';
 import { useAuth } from '@/lib/auth-context';
 import { friendlyError } from '@/lib/errors';
@@ -20,9 +23,15 @@ import { formatRupiah } from '@/lib/format';
 import { showLocalNotification, unreadCount } from '@/lib/notifications';
 import { listRecentOrderStores, type RecentStore } from '@/lib/orders';
 import { finalPrice, listDiscountedProducts, type DiscountedProduct } from '@/lib/products';
-import { listNearbyStores, type NearbyStore } from '@/lib/stores';
+import { SPECIALTIES, specialtyCaption, type SpecialtySlug } from '@/lib/specialty';
+import {
+  listNearbyStores,
+  listStoreStats,
+  type NearbyStore,
+  type StoreStats,
+} from '@/lib/stores';
 import { supabase } from '@/lib/supabase';
-import { colors, layout, radius, spacing } from '@/lib/theme';
+import { colors, gutterFor, layout, radius, spacing } from '@/lib/theme';
 
 function formatDistance(km: number): string {
   return km < 1 ? `${Math.round(km * 1000)} m` : `${km.toFixed(1).replace('.', ',')} km`;
@@ -31,10 +40,15 @@ function formatDistance(km: number): string {
 
 export default function BuyerHome() {
   const { profile } = useAuth();
+  const insets = useSafeAreaInsets();
+  const { width } = useWindowDimensions();
+  const gutter = gutterFor(width);
   const [stores, setStores] = useState<NearbyStore[] | null>(null);
   const [deals, setDeals] = useState<DiscountedProduct[]>([]);
   const [again, setAgain] = useState<RecentStore[]>([]);
   const [unread, setUnread] = useState(0);
+  const [stats, setStats] = useState<Map<string, StoreStats>>(new Map());
+  const [tag, setTag] = useState<SpecialtySlug | null>(null);
   const [denied, setDenied] = useState(false);
   const [loadFailed, setLoadFailed] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
@@ -108,9 +122,14 @@ export default function BuyerHome() {
   // Discounts are scoped to the warungs actually near the buyer, so this one
   // genuinely has to wait for the nearby list.
   const loadDeals = useCallback((nearby: NearbyStore[]) => {
-    listDiscountedProducts(nearby.map((s) => s.id))
+    const ids = nearby.map((s) => s.id);
+    listDiscountedProducts(ids)
       .then(setDeals)
       .catch((e) => console.warn('listDiscountedProducts:', e.message));
+    // One round trip powers all four recommendation rails.
+    listStoreStats(ids)
+      .then(setStats)
+      .catch((e) => console.warn('listStoreStats:', e.message));
   }, []);
 
   const load = useCallback(() => {
@@ -146,31 +165,107 @@ export default function BuyerHome() {
   const openStore = (id: string) =>
     router.push({ pathname: '/(buyer)/store/[id]', params: { id } });
 
+  // The chip filters EVERYTHING on the page, rails included — otherwise
+  // tapping "Bumbu dapur" would leave four rails full of warungs that do not
+  // sell any. Sorting happens client-side over the already-fetched nearby list;
+  // it is a few dozen rows, so four more round trips would be waste.
+  const visible = tag ? (stores ?? []).filter((s) => s.specialty?.includes(tag)) : (stores ?? []);
+
+  const statOf = (id: string) => stats.get(id);
+  const by = <T,>(pick: (s: NearbyStore) => T | null | undefined, dir: 'asc' | 'desc') =>
+    [...visible]
+      // Drop warungs with no value for this signal rather than sorting nulls
+      // to one end, where they would look like real recommendations.
+      .filter((s) => pick(s) !== null && pick(s) !== undefined)
+      .sort((a, b) => {
+        const av = pick(a) as number;
+        const bv = pick(b) as number;
+        return dir === 'asc' ? av - bv : bv - av;
+      })
+      .slice(0, 8);
+
+  const mostComplete = by((s) => statOf(s.id)?.product_count, 'desc');
+  const cheapestFee = by((s) => s.delivery_fee, 'asc');
+  const bestRated = [...visible]
+    .filter((s) => statOf(s.id)?.avg_rating != null)
+    .sort((a, b) => {
+      const ar = statOf(a.id)!.avg_rating!;
+      const br = statOf(b.id)!.avg_rating!;
+      // Ties broken by review count: 5.0 from twelve people beats 5.0 from one.
+      return br - ar || statOf(b.id)!.review_count - statOf(a.id)!.review_count;
+    })
+    .slice(0, 8);
+  const newest = [...visible]
+    .sort((a, b) => Date.parse(b.created_at) - Date.parse(a.created_at))
+    .slice(0, 8);
+
+  // The navy panel. Same Navy tinta surface as the auth dome, so the app reads
+  // as one thing — and it finally spends the 25% navy the brand ratio allots,
+  // which this screen previously ignored entirely.
+  //
+  // Search lives IN here rather than in the list header: white on navy is the
+  // strongest contrast available, and it means search never scrolls away.
   const header = (
-    <View style={styles.header}>
-      <RotatingGreeting name={profile?.full_name?.split(' ')[0]} />
+    <View
+      style={[
+        styles.panel,
+        // Cancel <Screen>'s gutter so the navy runs edge to edge, and own the
+        // status-bar inset — same approach as components/ui/auth-header.tsx.
+        { marginHorizontal: -gutter, paddingHorizontal: gutter, paddingTop: insets.top + spacing.md },
+      ]}>
+      <View style={styles.headerRow}>
+        <RotatingGreeting name={profile?.full_name?.split(' ')[0]} tone="onDark" />
+        <Pressable
+          onPress={() => router.push('/(buyer)/notifications')}
+          accessibilityRole="button"
+          accessibilityLabel={
+            unread > 0 ? `Pemberitahuan, ${unread} belum dibaca` : 'Pemberitahuan'
+          }
+          style={styles.bell}>
+          <Feather name="bell" size={22} color={colors.bg} />
+          {unread > 0 && (
+            <View style={styles.badge}>
+              <Text variant="tag" color="onPrimary">
+                {unread > 9 ? '9+' : String(unread)}
+              </Text>
+            </View>
+          )}
+        </Pressable>
+      </View>
+
       <Pressable
-        onPress={() => router.push('/(buyer)/notifications')}
-        accessibilityRole="button"
-        accessibilityLabel={
-          unread > 0 ? `Pemberitahuan, ${unread} belum dibaca` : 'Pemberitahuan'
-        }
-        style={styles.bell}>
-        <Feather name="bell" size={22} color={colors.text} />
-        {unread > 0 && (
-          <View style={styles.badge}>
-            <Text variant="tag" color="onPrimary">
-              {unread > 9 ? '9+' : String(unread)}
-            </Text>
-          </View>
-        )}
+        onPress={() => router.push('/(buyer)/search')}
+        accessibilityRole="search"
+        accessibilityLabel="Cari warung"
+        style={styles.searchBox}>
+        <Feather name="search" size={18} color={colors.link} />
+        <Text variant="body" color="secondary">
+          Cari warung…
+        </Text>
       </Pressable>
+
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        accessibilityRole="tablist"
+        contentContainerStyle={styles.chips}>
+        <SpecialtyChip label="Semua" selected={tag === null} onPress={() => setTag(null)} />
+        {SPECIALTIES.map((sp) => (
+          <SpecialtyChip
+            key={sp.slug}
+            label={sp.label}
+            icon={sp.icon}
+            selected={tag === sp.slug}
+            onPress={() => setTag(tag === sp.slug ? null : sp.slug)}
+          />
+        ))}
+      </ScrollView>
     </View>
   );
 
   if (!stores) {
     return (
-      <Screen>
+      <Screen edges={{ top: false }}>
         {header}
         <ListState state="loading" message="Mencari warung di sekitarmu…" />
       </Screen>
@@ -178,11 +273,11 @@ export default function BuyerHome() {
   }
 
   return (
-    <Screen>
+    <Screen edges={{ top: false }}>
       {header}
 
       <FlatList
-        data={stores}
+        data={visible}
         keyExtractor={(s) => s.id}
         showsVerticalScrollIndicator={false}
         refreshControl={
@@ -194,17 +289,6 @@ export default function BuyerHome() {
         }
         ListHeaderComponent={
           <View>
-            <Pressable
-              onPress={() => router.push('/(buyer)/search')}
-              accessibilityRole="search"
-              accessibilityLabel="Cari warung"
-              style={styles.searchBox}>
-              <Feather name="search" size={18} color={colors.secondary} />
-              <Text variant="body" color="secondary">
-                Cari warung…
-              </Text>
-            </Pressable>
-
             {deals.length > 0 && (
               <>
                 <SectionLabel first>Lagi diskon</SectionLabel>
@@ -257,7 +341,7 @@ export default function BuyerHome() {
                       accessibilityLabel={`Pesan lagi di ${s.name}`}
                       style={styles.againCard}>
                       <View style={styles.againTile}>
-                        <Feather name="rotate-ccw" size={18} color={colors.primaryInk} />
+                        <Feather name="rotate-ccw" size={18} color={colors.linkInk} />
                       </View>
                       <Text variant="bodyStrong" numberOfLines={2}>
                         {s.name}
@@ -268,17 +352,53 @@ export default function BuyerHome() {
               </>
             )}
 
-            <SectionLabel>Warung dekat kamu</SectionLabel>
+            <StoreRail
+              title="Paling lengkap"
+              stores={mostComplete}
+              caption={(s) => `${statOf(s.id)?.product_count ?? 0} barang`}
+              onPressStore={openStore}
+            />
+            <StoreRail
+              title="Ongkir termurah"
+              stores={cheapestFee}
+              caption={(s) => `ongkir ${formatRupiah(s.delivery_fee)}`}
+              onPressStore={openStore}
+            />
+            <StoreRail
+              title="Rating tertinggi"
+              stores={bestRated}
+              caption={(s) => {
+                const st = statOf(s.id)!;
+                return `★ ${st.avg_rating} · ${st.review_count} ulasan`;
+              }}
+              onPressStore={openStore}
+            />
+            <StoreRail
+              title="Baru buka"
+              stores={newest}
+              caption={(s) => specialtyCaption(s.specialty) || 'Warung baru'}
+              onPressStore={openStore}
+            />
+
+            <SectionLabel>
+              {tag ? `Warung ${SPECIALTIES.find((x) => x.slug === tag)?.label}` : 'Warung dekat kamu'}
+            </SectionLabel>
           </View>
         }
         renderItem={({ item }) => (
           <Row
             title={item.name}
-            meta={`${formatDistance(item.distance_km)} · ongkir ${formatRupiah(item.delivery_fee)}`}
+            meta={[
+              formatDistance(item.distance_km),
+              `ongkir ${formatRupiah(item.delivery_fee)}`,
+              specialtyCaption(item.specialty),
+            ]
+              .filter(Boolean)
+              .join(' · ')}
             onPress={() => openStore(item.id)}
             leading={
               <View style={styles.storeTile}>
-                <Text variant="bodyStrong" color="primaryInk">
+                <Text variant="bodyStrong" color="linkInk">
                   {item.name.trim().charAt(0).toUpperCase()}
                 </Text>
               </View>
@@ -286,7 +406,17 @@ export default function BuyerHome() {
           />
         )}
         ListEmptyComponent={
-          denied ? (
+          // A filtered-to-nothing list is NOT "no warungs nearby" — say which
+          // filter is doing it, and give a way out.
+          tag && (stores?.length ?? 0) > 0 ? (
+            <ListState
+              state="empty"
+              icon="filter"
+              title={`Belum ada warung ${SPECIALTIES.find((x) => x.slug === tag)?.label}`}
+              message="Di sekitarmu belum ada yang jual itu. Coba pilihan lain."
+              action={{ label: 'Lihat semua warung', onPress: () => setTag(null) }}
+            />
+          ) : denied ? (
             <ListState
               state="empty"
               icon="map-pin"
@@ -316,12 +446,18 @@ export default function BuyerHome() {
 }
 
 const styles = StyleSheet.create({
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.sm,
-    paddingBottom: spacing.sm,
+  // Navy tinta, full-bleed, curved into the cream feed. Radius is 28 rather
+  // than the auth dome's 40: this band is short and functional, and a 40 curve
+  // on ~150dp reads as a blob instead of a gesture.
+  panel: {
+    backgroundColor: colors.text,
+    borderBottomLeftRadius: 28,
+    borderBottomRightRadius: 28,
+    paddingBottom: spacing.lg,
+    gap: spacing.md,
   },
+  headerRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  chips: { gap: spacing.sm, paddingRight: spacing.lg },
   bell: {
     width: layout.minTouch,
     height: layout.minTouch,
@@ -348,8 +484,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.md,
     borderRadius: radius.sm,
     backgroundColor: colors.card,
-    borderWidth: layout.hairline,
-    borderColor: colors.border,
+    // No hairline: on navy the white fill is its own boundary, and a border
+    // would just be extra chrome.
   },
   rail: { gap: spacing.sm, paddingVertical: spacing.xs, paddingRight: spacing.lg },
   dealCard: {
@@ -372,7 +508,7 @@ const styles = StyleSheet.create({
     width: 36,
     height: 36,
     borderRadius: radius.sm,
-    backgroundColor: colors.primarySoft,
+    backgroundColor: colors.linkSoft,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -380,7 +516,7 @@ const styles = StyleSheet.create({
     width: 44,
     height: 44,
     borderRadius: radius.sm,
-    backgroundColor: colors.primarySoft,
+    backgroundColor: colors.linkSoft,
     alignItems: 'center',
     justifyContent: 'center',
   },

@@ -11,7 +11,36 @@ export type Store = {
   is_active: boolean;
   delivery_fee: number;
   created_at: string;
+  /** Speciality slugs from lib/specialty.ts. Constrained by the database. */
+  specialty: string[];
 };
+
+/** Per-warung aggregates from the `store_stats` view. */
+export type StoreStats = {
+  store_id: string;
+  product_count: number;
+  discount_count: number;
+  /** null until someone reviews the warung. */
+  avg_rating: number | null;
+  review_count: number;
+};
+
+/**
+ * Aggregates for the home's recommendation rails, keyed by store id.
+ *
+ * One round trip for all four rails. Reads the `store_stats` view, which is
+ * deliberately not security_invoker so ratings average across every buyer's
+ * orders rather than only the caller's — see the migration for why.
+ */
+export async function listStoreStats(storeIds: string[]): Promise<Map<string, StoreStats>> {
+  if (storeIds.length === 0) return new Map();
+  const { data, error } = await supabase
+    .from('store_stats')
+    .select('store_id, product_count, discount_count, avg_rating, review_count')
+    .in('store_id', storeIds);
+  if (error) throw error;
+  return new Map((data as StoreStats[]).map((s) => [s.store_id, s]));
+}
 
 export type NewStore = {
   name: string;
@@ -19,6 +48,7 @@ export type NewStore = {
   lat?: number;
   lng?: number;
   gmaps_url?: string;
+  specialty?: string[];
 };
 
 export async function listMyStores(ownerId: string): Promise<Store[]> {
@@ -76,6 +106,16 @@ export async function setStoreActive(id: string, isActive: boolean): Promise<voi
     .from('stores')
     .update({ is_active: isActive })
     .eq('id', id);
+  if (error) throw error;
+}
+
+/**
+ * What the warung is known for. The database validates the slugs against
+ * `stores_specialty_check`, so a bad value fails loudly rather than creating a
+ * category the buyer's chips cannot render.
+ */
+export async function setStoreSpecialty(id: string, specialty: string[]): Promise<void> {
+  const { error } = await supabase.from('stores').update({ specialty }).eq('id', id);
   if (error) throw error;
 }
 

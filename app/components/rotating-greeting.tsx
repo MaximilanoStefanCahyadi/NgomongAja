@@ -1,8 +1,7 @@
 // "Selamat datang, Maxi" → erases → "Wilujeng sumping, Maxi" → …
 //
-// The greeting types itself out, holds, erases, and moves to the next
-// language. The name never moves — only the greeting in front of it changes,
-// so the sentence stays readable the whole time.
+// ONLY the greeting animates. The name is rendered on every frame and is never
+// typed, erased, or faded — it is a person's name, not an effect.
 //
 // Two things it is careful about:
 //   • Reduced motion: no typing at all, the greeting just swaps on a timer.
@@ -16,20 +15,22 @@ import { AccessibilityInfo, StyleSheet, View } from 'react-native';
 import { Text } from '@/components/ui';
 import { greetingRotation, type Greeting } from '@/lib/greeting';
 
-const TYPE_MS = 55; // per character, typing forward
-const ERASE_MS = 28; // per character, deleting (faster — erasing is not the point)
-const HOLD_MS = 2200; // fully typed, before it starts erasing
+const TYPE_MS = 70; // per character, typing forward
+const ERASE_MS = 35; // per character, deleting (faster — erasing is not the point)
+const HOLD_MS = 6000; // fully typed, before erasing — long enough to read twice
 const BLINK_MS = 500;
-const SWAP_MS = 3600; // reduced-motion: plain swap interval
+const SWAP_MS = 8000; // reduced-motion: plain swap interval
 
 type Phase = 'typing' | 'holding' | 'erasing';
 
 export type RotatingGreetingProps = {
   /** Buyer's first name, shown after the greeting. */
   name?: string | null;
+  /** `onDark` for the navy header panel — the default ink IS navy. */
+  tone?: 'default' | 'onDark';
 };
 
-export function RotatingGreeting({ name }: RotatingGreetingProps) {
+export function RotatingGreeting({ name, tone = 'default' }: RotatingGreetingProps) {
   const rotation = useRef<Greeting[]>(greetingRotation());
   const [index, setIndex] = useState(0);
   const [len, setLen] = useState(0);
@@ -98,9 +99,10 @@ export function RotatingGreeting({ name }: RotatingGreetingProps) {
 
   const typed = reduceMotion ? full : full.slice(0, len);
   const complete = typed.length === full.length;
-  // The name only joins once the greeting is whole — "Selamat data, Maxi"
-  // mid-keystroke reads like a bug.
-  const tail = name && complete ? `, ${name}` : '';
+  // Always rendered, never animated: only the greeting types. The cursor sits
+  // between the two, so a half-typed "Selamat data▌, Maxi" reads as typing in
+  // progress rather than as a glitch.
+  const tail = name ? `, ${name}` : '';
 
   return (
     <View
@@ -110,7 +112,10 @@ export function RotatingGreeting({ name }: RotatingGreetingProps) {
       // Deliberately the FINISHED sentence, never the partial one, and it does
       // not change as the languages rotate.
       accessibilityLabel={name ? `Selamat datang, ${name}` : 'Selamat datang'}>
-      <Text variant="title" numberOfLines={2}>
+      <Text
+        variant="title"
+        color={tone === 'onDark' ? 'onDark' : 'text'}
+        numberOfLines={2}>
         {typed}
         {!reduceMotion && !complete && cursorOn ? '|' : ''}
         {tail}
@@ -120,5 +125,10 @@ export function RotatingGreeting({ name }: RotatingGreetingProps) {
 }
 
 const styles = StyleSheet.create({
-  wrap: { flex: 1, minWidth: 0 },
+  // minHeight is load-bearing, not padding: the greeting rotates through
+  // different lengths, so "Wilujeng sumping, Maxi" can wrap to two lines where
+  // "Sugeng rawuh, Maxi" fits on one. Without a floor of two lines the parent
+  // resizes mid-animation and the whole feed jumps. `typography.title`
+  // lineHeight is 28.
+  wrap: { flex: 1, minWidth: 0, minHeight: 56, justifyContent: 'center' },
 });
